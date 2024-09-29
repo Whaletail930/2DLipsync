@@ -8,7 +8,6 @@ import librosa
 from pydub import AudioSegment
 from pydub.effects import normalize
 import os
-import pickle
 
 
 FORMAT = pyaudio.paFloat32
@@ -134,18 +133,13 @@ def extract_features_from_file(file_path, sampling_rate=16000, n_mfcc=13, n_fft=
     return features
 
 
-def save_features_to_file(file_path, output_path_pickle, output_path_json, sampling_rate=16000, n_mfcc=13, n_fft=256,
+def save_features_to_file(file_path, output_path_json, sampling_rate=16000, n_mfcc=13, n_fft=256,
                           hop_length=160, n_mels=40, fmax=None):
 
     features = extract_features_from_file(file_path, sampling_rate=sampling_rate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length,
                                           n_mels=n_mels, fmax=fmax)
 
-    os.makedirs(os.path.dirname(output_path_pickle), exist_ok=True)
     os.makedirs(os.path.dirname(output_path_json), exist_ok=True)
-
-    with open(output_path_pickle, 'wb') as f:
-        pickle.dump(features, f)
-    print(f"Features saved as pickle to {output_path_pickle}")
 
     time_steps = features[0].shape[1]
     features_by_time = []
@@ -206,27 +200,59 @@ def pair_mouthcues_with_features(features_file, mouthcues_file, output_file):
     print(f"Paired data saved to {output_file}")
 
 
-def process_features_file():
-    file_path = r"C:\RESEARCH\2d_lipsync\Dataset generation\Rhubarb-Lip-Sync-1.13.0-Windows\prideandprejudice_05-06_austen_apc.wav"
-    output_path = r'C:\Users\belle\PycharmProjects\2DLipsync\OUTPUT\female_1.pkl'
-    output_path_json = r'C:\Users\belle\PycharmProjects\2DLipsync\OUTPUT\female_1.json'
+def process_features_file(rec_file_path):
 
-    save_features_to_file(file_path, output_path, output_path_json)
+    recording_name = Path(rec_file_path).name.strip('.wav')
+    output_path_json = Path(OUTPUT_FOLDER / f"{recording_name}_features.json")
+
+    save_features_to_file(rec_file_path, output_path_json)
+
+    return output_path_json
 
 
-def combine_data():
+def combine_data(mouthcue_file, features_file):
 
-    features_file = r"C:\Users\belle\PycharmProjects\2DLipsync\OUTPUT\female_1.json"
-    mouthcue_file = r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\labels\female_labeled_1.txt"
-    output_file = r"C:\Users\belle\PycharmProjects\2DLipsync\OUTPUT\female_1_combined.json"
+    file_name = Path(features_file).name.strip('_features.wav')
+    # features_file = r"C:\Users\belle\PycharmProjects\2DLipsync\OUTPUT\female_1.json"
+    # mouthcue_file = r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\labels\female_labeled_1.txt"
+    output_file = Path(OUTPUT_FOLDER / f"{file_name}_combined.json")
 
     pair_mouthcues_with_features(features_file, mouthcue_file, output_file)
+
+    return output_file
 
 
 def run_rhubarb_lipsync(recording_wav):
 
-    recording_name = Path(recording_wav).name
-    output_file = Path(OUTPUT_FOLDER / f"{recording_name.strip('.wav')}_visemes.json")
+    recording_name = Path(recording_wav).name.strip('.wav')
+    output_file = Path(OUTPUT_FOLDER / f"{recording_name}_visemes.json")
     rhubarb_path = r"C:\RESEARCH\2d_lipsync\Dataset generation\Rhubarb-Lip-Sync-1.13.0-Windows\rhubarb.exe"
 
-    subprocess.run([f"{rhubarb_path}", "-f", "json", "-o", f"{output_file}", f"{recording_wav}"])
+    try:
+        subprocess.run([f"{rhubarb_path}", "-f", "json", "-o", f"{output_file}", f"{recording_wav}"])
+
+        return output_file
+
+    except Exception as e:
+
+        print(e)
+
+        return None
+
+
+def create_training_data(rec_file_path):
+
+    print(f"Extracting features from {Path(rec_file_path).name}")
+    features_file = process_features_file(rec_file_path)
+    print("Successfully extracted features")
+    print(f"Generating visemes from {Path(rec_file_path).name}")
+    mouthcues_file = run_rhubarb_lipsync(Path(rec_file_path))
+    print("Successfully generated visemes")
+    print(f"Combining {mouthcues_file.name} and {features_file.name}")
+    combined_data = combine_data(mouthcues_file, features_file)
+    print("Training data successfully created")
+
+    return combined_data
+
+
+# create_training_data(r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\samples\male_11_min.wav")
