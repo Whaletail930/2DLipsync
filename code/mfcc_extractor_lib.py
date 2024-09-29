@@ -1,4 +1,6 @@
 import json
+import subprocess
+from pathlib import Path
 
 import numpy as np
 import pyaudio
@@ -19,20 +21,22 @@ STRIDE_SIZE = int(RATE * STRIDE_DURATION)
 
 p = pyaudio.PyAudio()
 
+OUTPUT_FOLDER = Path(__file__).resolve().parent.parent / "OUTPUT"
 
-def hard_limiter(audio_buffer, sr, threshold=0.8):
+
+def hard_limiter(audio_buffer, sampling_rate, threshold=0.8):
     """
     Apply a hard limiter to the audio buffer.
     Parameters:
         audio_buffer (np.array): The audio buffer to process.
-        sr (int): Sampling rate of the audio.
+        sampling_rate (int): Sampling rate of the audio.
         threshold (float): The threshold above which audio samples will be limited.
     Returns:
         np.array: The processed audio buffer.
     """
     audio_segment = AudioSegment(
         audio_buffer.tobytes(),
-        frame_rate=sr,
+        frame_rate=sampling_rate,
         sample_width=audio_buffer.dtype.itemsize,
         channels=1
     )
@@ -44,12 +48,12 @@ def hard_limiter(audio_buffer, sr, threshold=0.8):
     return limited_buffer
 
 
-def extract_features_live(audio_buffer, sr, n_mfcc=13, n_fft=256, hop_length=160, n_mels=40, fmax=None):
+def extract_features_live(audio_buffer, sampling_rate, n_mfcc=13, n_fft=256, hop_length=160, n_mels=40, fmax=None):
 
     audio_buffer = audio_buffer.astype(np.float32)
     audio_buffer /= np.max(np.abs(audio_buffer)) + np.finfo(float).eps
 
-    mfcc = librosa.feature.mfcc(y=audio_buffer, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels,
+    mfcc = librosa.feature.mfcc(y=audio_buffer, sr=sampling_rate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels,
                                 fmax=fmax)
 
     if mfcc.shape[1] > 1:
@@ -105,14 +109,14 @@ def process_live():
         p.terminate()
 
 
-def extract_features_from_file(file_path, sr=16000, n_mfcc=13, n_fft=256, hop_length=160, n_mels=40, fmax=None):
+def extract_features_from_file(file_path, sampling_rate=16000, n_mfcc=13, n_fft=256, hop_length=160, n_mels=40, fmax=None):
 
-    audio_buffer, file_sr = librosa.load(file_path, sr=sr)
+    audio_buffer, file_sr = librosa.load(file_path, sr=sampling_rate)
 
     audio_buffer = audio_buffer.astype(np.float32)
     audio_buffer /= np.max(np.abs(audio_buffer)) + np.finfo(float).eps
 
-    mfcc = librosa.feature.mfcc(y=audio_buffer, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels, fmax=fmax)
+    mfcc = librosa.feature.mfcc(y=audio_buffer, sr=sampling_rate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels, fmax=fmax)
 
     if mfcc.shape[1] > 1:
 
@@ -130,10 +134,10 @@ def extract_features_from_file(file_path, sr=16000, n_mfcc=13, n_fft=256, hop_le
     return features
 
 
-def save_features_to_file(file_path, output_path_pickle, output_path_json, sr=16000, n_mfcc=13, n_fft=256,
+def save_features_to_file(file_path, output_path_pickle, output_path_json, sampling_rate=16000, n_mfcc=13, n_fft=256,
                           hop_length=160, n_mels=40, fmax=None):
 
-    features = extract_features_from_file(file_path, sr=sr, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length,
+    features = extract_features_from_file(file_path, sampling_rate=sampling_rate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length,
                                           n_mels=n_mels, fmax=fmax)
 
     os.makedirs(os.path.dirname(output_path_pickle), exist_ok=True)
@@ -148,7 +152,7 @@ def save_features_to_file(file_path, output_path_pickle, output_path_json, sr=16
 
     for t in range(time_steps):
 
-        timestamp_ms = (t * hop_length / sr) * 1000
+        timestamp_ms = (t * hop_length / sampling_rate) * 1000
 
         time_step_data = {
             "timestamp_ms": timestamp_ms,
@@ -203,7 +207,7 @@ def pair_mouthcues_with_features(features_file, mouthcues_file, output_file):
 
 
 def process_features_file():
-    file_path = r"C:\RESEARCH\2d lipsync\Dataset generation\Rhubarb-Lip-Sync-1.13.0-Windows\prideandprejudice_05-06_austen_apc.wav"
+    file_path = r"C:\RESEARCH\2d_lipsync\Dataset generation\Rhubarb-Lip-Sync-1.13.0-Windows\prideandprejudice_05-06_austen_apc.wav"
     output_path = r'C:\Users\belle\PycharmProjects\2DLipsync\OUTPUT\female_1.pkl'
     output_path_json = r'C:\Users\belle\PycharmProjects\2DLipsync\OUTPUT\female_1.json'
 
@@ -218,4 +222,11 @@ def combine_data():
 
     pair_mouthcues_with_features(features_file, mouthcue_file, output_file)
 
-combine_data()
+
+def run_rhubarb_lipsync(recording_wav):
+
+    recording_name = Path(recording_wav).name
+    output_file = Path(OUTPUT_FOLDER / f"{recording_name.strip('.wav')}_visemes.json")
+    rhubarb_path = r"C:\RESEARCH\2d_lipsync\Dataset generation\Rhubarb-Lip-Sync-1.13.0-Windows\rhubarb.exe"
+
+    subprocess.run([f"{rhubarb_path}", "-f", "json", "-o", f"{output_file}", f"{recording_wav}"])
