@@ -226,9 +226,8 @@ def process_features_file(rec_file_path):
 def combine_data(mouthcue_file, features_file):
 
     file_name = Path(features_file).name.strip('_features.wav')
-    # features_file = r"C:\Users\belle\PycharmProjects\2DLipsync\OUTPUT\female_1.json"
-    # mouthcue_file = r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\labels\female_labeled_1.txt"
-    output_file = Path(OUTPUT_FOLDER / f"{file_name}_combined.json")
+
+    output_file = Path(OUTPUT_FOLDER / f"{file_name.strip('.json')}_combined.json")
 
     pair_mouthcues_with_features(features_file, mouthcue_file, output_file)
 
