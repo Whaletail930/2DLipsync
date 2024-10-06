@@ -108,7 +108,7 @@ def process_live():
         p.terminate()
 
 
-def extract_features_from_file(file_path, sampling_rate=16000, n_mfcc=13, n_fft=256, hop_length=160, n_mels=40, fmax=None):
+def extract_features_from_file(file_path, sampling_rate=16000, n_mfcc=13, n_fft=400, hop_length=160, n_mels=40, fmax=None):
 
     audio_buffer, file_sr = librosa.load(file_path, sr=sampling_rate)
 
@@ -118,7 +118,6 @@ def extract_features_from_file(file_path, sampling_rate=16000, n_mfcc=13, n_fft=
     mfcc = librosa.feature.mfcc(y=audio_buffer, sr=sampling_rate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels, fmax=fmax)
 
     if mfcc.shape[1] > 1:
-
         delta_mfcc = librosa.feature.delta(mfcc, width=3)
 
         log_energy = librosa.feature.rms(y=audio_buffer, frame_length=n_fft, hop_length=hop_length, center=True)
@@ -133,7 +132,7 @@ def extract_features_from_file(file_path, sampling_rate=16000, n_mfcc=13, n_fft=
     return features
 
 
-def save_features_to_file(file_path, output_path_json, sampling_rate=16000, n_mfcc=13, n_fft=256,
+def save_features_to_file(file_path, output_path_json, sampling_rate=16000, n_mfcc=13, n_fft=400,
                           hop_length=160, n_mels=40, fmax=None):
 
     features = extract_features_from_file(file_path, sampling_rate=sampling_rate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length,
@@ -141,15 +140,24 @@ def save_features_to_file(file_path, output_path_json, sampling_rate=16000, n_mf
 
     os.makedirs(os.path.dirname(output_path_json), exist_ok=True)
 
+    audio_duration = librosa.get_duration(path=file_path, sr=sampling_rate)
+
     time_steps = features[0].shape[1]
     features_by_time = []
 
     for t in range(time_steps):
+        start_timestamp_ms = (t * hop_length / sampling_rate) * 1000
 
-        timestamp_ms = (t * hop_length / sampling_rate) * 1000
+        end_timestamp_ms = ((t * hop_length + n_fft) / sampling_rate) * 1000
+
+        if end_timestamp_ms > audio_duration * 1000:
+            end_timestamp_ms = audio_duration * 1000
+
+        duration_ms = end_timestamp_ms - start_timestamp_ms
 
         time_step_data = {
-            "timestamp_ms": timestamp_ms,
+            "start_timestamp_ms": start_timestamp_ms,
+            "duration_ms": duration_ms,
             "mfcc": features[0][:, t].tolist() if features[0] is not None else None,
             "delta_mfcc": features[1][:, t].tolist() if features[1] is not None else None,
             "log_energy": features[2][:, t].tolist() if features[2] is not None else None,
@@ -163,7 +171,6 @@ def save_features_to_file(file_path, output_path_json, sampling_rate=16000, n_mf
 
 
 def pair_mouthcues_with_features(features_file, mouthcues_file, output_file):
-
     with open(features_file, 'r') as f:
         features_by_time = json.load(f)
 
@@ -175,26 +182,32 @@ def pair_mouthcues_with_features(features_file, mouthcues_file, output_file):
     paired_data = []
 
     for feature in features_by_time:
-        timestamp_ms = feature["timestamp_ms"]
+        start_timestamp_ms = feature["start_timestamp_ms"]
+        end_timestamp_ms = start_timestamp_ms + feature["duration_ms"]
 
-        mouthcue = None
+        relevant_mouthcues = []
         for cue in mouthcues:
             start_ms = cue["start"] * 1000
             end_ms = cue["end"] * 1000
 
-            if start_ms <= timestamp_ms <= end_ms:
-                mouthcue = cue["value"]
-                break
+            if start_ms < end_timestamp_ms and end_ms > start_timestamp_ms:
+                relevant_mouthcues.append({
+                    "mouthcue": cue["value"],
+                    "start": start_ms,
+                    "end": end_ms
+                })
 
         paired_data.append({
-            "timestamp_ms": timestamp_ms,
-            "mouthcue": mouthcue,
+            "start_timestamp_ms": start_timestamp_ms,
+            "duration_ms": feature["duration_ms"],
+            "mouthcues": relevant_mouthcues,
             "mfcc": feature["mfcc"],
             "delta_mfcc": feature["delta_mfcc"],
             "log_energy": feature["log_energy"],
             "delta_log_energy": feature["delta_log_energy"]
         })
 
+    # Save the paired data to the output file
     with open(output_file, 'w') as f:
         json.dump(paired_data, f, indent=4)
     print(f"Paired data saved to {output_file}")
@@ -255,4 +268,4 @@ def create_training_data(rec_file_path):
     return combined_data
 
 
-# create_training_data(r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\samples\male_11_min.wav")
+create_training_data(r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\samples\male_11_min.wav")
