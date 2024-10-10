@@ -267,4 +267,23 @@ def create_training_data(rec_file_path):
     return combined_data
 
 
-create_training_data(r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\samples\male_11_min.wav")
+def process_all_wav_files_in_folder(folder_path):
+    folder_path = Path(folder_path)
+    wav_files = list(folder_path.glob("*.wav"))
+
+    if not wav_files:
+        print(f"No .wav files found in {folder_path}")
+        return
+
+    for wav_file in wav_files:
+        try:
+            print(f"Processing {wav_file.name}...")
+            create_training_data(wav_file)
+            print(f"Successfully processed {wav_file.name}")
+        except Exception as e:
+            print(f"Error processing {wav_file.name}: {e}")
+
+    print("All files processed.")
+
+
+process_all_wav_files_in_folder(r"C:\RESEARCH\2d_lipsync\Dataset generation\data\timit-wav")
