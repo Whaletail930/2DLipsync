@@ -52,9 +52,8 @@ def encode_labels(df, label_encoder=None, onehot_encoder=None):
     return labels_onehot, label_encoder, onehot_encoder
 
 
-def data_generator(folder_path, batch_size=32):
-    label_encoder = None
-    onehot_encoder = None
+def prefit_label_encoder(folder_path):
+    all_labels = set()
 
     for file_name in os.listdir(folder_path):
         if file_name.endswith('.json'):
@@ -62,15 +61,58 @@ def data_generator(folder_path, batch_size=32):
             json_data = load_json(file_path)
             df = json_to_dataframe(json_data)
 
-            labels, label_encoder, onehot_encoder = encode_labels(df, label_encoder, onehot_encoder)
+            if not df.empty:
+                all_labels.update(df['label'].tolist())
 
-            features = df.drop(columns=['label', 'label_encoded']).values
-            timesteps = 1
-            features = features.reshape((features.shape[0], timesteps, features.shape[1]))
+    label_encoder = LabelEncoder()
+    label_encoder.fit(list(all_labels))
 
-            for start in range(0, features.shape[0], batch_size):
-                end = min(start + batch_size, features.shape[0])
-                yield features[start:end], labels[start:end]
+    return label_encoder
+
+
+def data_generator(folder_path, batch_size=10):
+    label_encoder = prefit_label_encoder(folder_path)
+    num_visemes = len(label_encoder.classes_)
+    onehot_encoder = OneHotEncoder(sparse_output=False, categories=[np.arange(num_visemes)])
+
+    file_names = [f for f in os.listdir(folder_path) if f.endswith('.json')]
+    total_files = len(file_names)
+
+    while True:
+        for file_name in file_names:
+            file_path = os.path.join(folder_path, file_name)
+            json_data = load_json(file_path)
+            df = json_to_dataframe(json_data)
+
+            if df.empty:
+                continue
+
+            try:
+                labels_encoded = label_encoder.transform(df['label'])
+                labels_onehot = onehot_encoder.fit_transform(labels_encoded.reshape(-1, 1))
+
+                features = df.drop(columns=['label']).apply(pd.to_numeric, errors='coerce')
+                features = features.values.reshape((features.shape[0], 1, features.shape[1]))  # Reshape for LSTM
+
+                for start in range(0, features.shape[0], batch_size):
+                    end = min(start + batch_size, features.shape[0])
+                    yield features[start:end], labels_onehot[start:end]
+
+            except Exception as e:
+                print(f"Error processing file {file_name}: {e}")
+                continue
+
+
+def count_steps_per_epoch(folder_path, batch_size):
+    total_steps = 0
+    for file_name in os.listdir(folder_path):
+        if file_name.endswith('.json'):
+            file_path = os.path.join(folder_path, file_name)
+            df = json_to_dataframe(load_json(file_path))
+            if not df.empty:
+                total_steps += len(df) // batch_size
+    return total_steps
+
 
 
 def create_model(input_shape, num_visemes):
@@ -88,22 +130,22 @@ folder_path = r'C:\Users\belle\PycharmProjects\2DLipsync\DATA\training'
 
 first_batch = next(data_generator(folder_path))
 input_shape = (first_batch[0].shape[1], first_batch[0].shape[2])
-num_visemes = 9  # Update code to make this dynamic (possibly issue at label encoding)
+num_visemes = first_batch[1].shape[1]
 
 model = create_model(input_shape, num_visemes)
 model.build(input_shape=(None, input_shape[0], input_shape[1]))
 model.summary()
 
-steps_per_epoch = sum([len(pd.read_json(os.path.join(folder_path, f))) for f in os.listdir(folder_path) if f.endswith('.json')]) // 32
+steps_per_epoch = count_steps_per_epoch(folder_path, batch_size=10)
 
 model.fit(
     data_generator(folder_path),
     steps_per_epoch=steps_per_epoch,
     epochs=200,
-    batch_size=10,
     validation_data=data_generator(folder_path),
     validation_steps=steps_per_epoch // 10
 )
+
 
 X_val, y_val = next(data_generator(folder_path))
 val_loss, val_accuracy = model.evaluate(X_val, y_val)
