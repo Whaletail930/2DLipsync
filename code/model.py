@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from keras import Sequential
+from keras.layers import Masking
 from keras.optimizers import Adam
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from tensorflow.python.keras.layers import LSTM, Dense, Dropout
@@ -114,10 +115,10 @@ def count_steps_per_epoch(folder_path, batch_size):
     return total_steps
 
 
-
 def create_model(input_shape, num_visemes):
     lipsync_model = Sequential()
-    lipsync_model.add(LSTM(200, input_shape=input_shape))
+    lipsync_model.add(Masking(mask_value=0.0, input_shape=input_shape))
+    lipsync_model.add(LSTM(200))
     lipsync_model.add(Dropout(0.5))
     lipsync_model.add(Dense(num_visemes, activation='softmax'))
     lipsync_model.compile(optimizer=Adam(learning_rate=0.001),
@@ -131,6 +132,7 @@ folder_path = r'C:\Users\belle\PycharmProjects\2DLipsync\DATA\training'
 first_batch = next(data_generator(folder_path))
 input_shape = (first_batch[0].shape[1], first_batch[0].shape[2])
 num_visemes = first_batch[1].shape[1]
+
 
 model = create_model(input_shape, num_visemes)
 model.build(input_shape=(None, input_shape[0], input_shape[1]))
@@ -150,3 +152,6 @@ model.fit(
 X_val, y_val = next(data_generator(folder_path))
 val_loss, val_accuracy = model.evaluate(X_val, y_val)
 print(f"Validation Loss: {val_loss}, Validation Accuracy: {val_accuracy}")
+
+model.save('lipsync_model')
+model.save('lipsync_model.h5')

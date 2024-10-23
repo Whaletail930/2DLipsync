@@ -9,6 +9,8 @@ from pydub import AudioSegment
 from pydub.effects import normalize
 import os
 
+import tensorflow as tf
+
 
 FORMAT = pyaudio.paFloat32
 CHANNELS = 1
@@ -48,21 +50,20 @@ def hard_limiter(audio_buffer, sampling_rate, threshold=0.8):
 
 
 def extract_features_live(audio_buffer, sampling_rate, n_mfcc=13, n_fft=256, hop_length=160, n_mels=40, fmax=None):
-
     audio_buffer = audio_buffer.astype(np.float32)
     audio_buffer /= np.max(np.abs(audio_buffer)) + np.finfo(float).eps
 
-    mfcc = librosa.feature.mfcc(y=audio_buffer, sr=sampling_rate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels,
-                                fmax=fmax)
+    mfcc = librosa.feature.mfcc(y=audio_buffer, sr=sampling_rate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels, fmax=fmax)
 
     if mfcc.shape[1] > 1:
+        delta_width = min(3, mfcc.shape[1])
 
-        delta_mfcc = librosa.feature.delta(mfcc, width=3)
+        delta_mfcc = librosa.feature.delta(mfcc, width=delta_width)
 
         log_energy = librosa.feature.rms(y=audio_buffer, frame_length=n_fft, hop_length=hop_length, center=True)
         log_energy = np.log(log_energy + np.finfo(float).eps)
 
-        delta_log_energy = librosa.feature.delta(log_energy, width=3)
+        delta_log_energy = librosa.feature.delta(log_energy, width=delta_width)
 
         features = [mfcc, delta_mfcc, log_energy, delta_log_energy]
     else:
@@ -71,33 +72,53 @@ def extract_features_live(audio_buffer, sampling_rate, n_mfcc=13, n_fft=256, hop
     return features
 
 
-def process_live():
+def pad_features(features, max_shape):
+    """
+    Pad the features to ensure they all have the same shape.
+    """
+    padded_features = []
+    for feature in features:
+        padded = np.zeros(max_shape, dtype=np.float32)
+        padded[:feature.shape[0], :feature.shape[1]] = feature  # Copy existing values into the padded array
+        padded_features.append(padded)
+    return np.array(padded_features)
 
+
+def process_live(model):
+    """
+    Capture live audio, extract features in real-time, and predict visemes.
+    """
     stream = p.open(format=FORMAT,
                     channels=CHANNELS,
                     rate=RATE,
                     input=True,
                     frames_per_buffer=CHUNK_SIZE)
 
+    print("Listening... Press Ctrl+C to stop.")
     try:
+        buffer = np.zeros((0,), dtype=np.float32)  # Initialize an empty buffer
         while True:
-
             audio_chunk = stream.read(CHUNK_SIZE, exception_on_overflow=False)
             audio_buffer = np.frombuffer(audio_chunk, dtype=np.float32)
+            buffer = np.concatenate([buffer, audio_buffer])
 
-            limited_buffer = hard_limiter(audio_buffer, RATE)
+            if len(buffer) >= CHUNK_SIZE:
+                limited_buffer = hard_limiter(buffer, RATE)
 
-            features = extract_features_live(limited_buffer, RATE, n_mfcc=13, n_fft=256, hop_length=160, n_mels=40,
-                                             fmax=RATE / 2)
+                features = extract_features_live(limited_buffer, RATE)
 
-            mfcc, delta_mfcc, log_energy, delta_log_energy = features
-            print("MFCC:\n", mfcc)
-            if delta_mfcc is not None:
-                print("Delta MFCC:\n", delta_mfcc)
-            if log_energy is not None:
-                print("Log Energy:\n", log_energy)
-            if delta_log_energy is not None:
-                print("Delta Log Energy:\n", delta_log_energy)
+                max_shape = (13, 3)
+
+                padded_features = pad_features(features, max_shape)
+
+                padded_features = np.expand_dims(padded_features, axis=0)  # Add batch dimension
+
+                predictions = model.predict(padded_features)
+
+                predicted_viseme = np.argmax(predictions, axis=-1)
+                print(f"Predicted Viseme: {predicted_viseme}")
+
+                buffer = np.zeros((0,), dtype=np.float32)
 
     except KeyboardInterrupt:
         print("Stream stopped")
@@ -286,4 +307,8 @@ def process_all_wav_files_in_folder(folder_path):
     print("All files processed.")
 
 
-process_all_wav_files_in_folder(r"C:\RESEARCH\2d_lipsync\Dataset generation\data\timit-wav")
+#process_all_wav_files_in_folder(r"C:\RESEARCH\2d_lipsync\Dataset generation\data\timit-wav")
+model = tf.keras.models.load_model(r'C:\Users\belle\PycharmProjects\2DLipsync\code\lipsync_model')
+#model.load_weights(r"C:\Users\belle\PycharmProjects\2DLipsync\code\lipsync_model.h5")
+#model.compile(loss=tf.keras.losses.categorical_crossentropy, optimizer=tf.keras.optimizers.Adam(learning_rate=0.001))
+process_live(model)
