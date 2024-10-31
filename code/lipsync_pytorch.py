@@ -38,7 +38,28 @@ def filter_predictions(predictions, window_size=3):
         return predictions[-1]
 
 
-def process_live(model, device, d=6):
+def remove_single_frame_visemes(current_viseme, previous_viseme, viseme_duration):
+    """
+    Enforce a minimum duration of two frames for each viseme.
+
+    Parameters:
+        current_viseme (int): The currently predicted viseme.
+        previous_viseme (int): The previous viseme that was displayed.
+        viseme_duration (int): Duration for which the current viseme has been displayed.
+
+    Returns:
+        (int, int): A tuple containing the selected viseme and updated viseme duration.
+    """
+    if current_viseme != previous_viseme:
+        if viseme_duration < 2:
+            return previous_viseme, viseme_duration + 1
+        else:
+            return current_viseme, 1
+    else:
+        return current_viseme, viseme_duration + 1
+
+
+def process_live(model, device, temporal_shift_windows=6):
 
     stream = p.open(format=FORMAT,
                     channels=CHANNELS,
@@ -49,7 +70,9 @@ def process_live(model, device, d=6):
     print("Listening... Press Ctrl+C to stop.")
     try:
         buffer = np.zeros((0,), dtype=np.float32)
-        predictions_buffer = deque(maxlen=d + 3)
+        predictions_buffer = deque(maxlen=temporal_shift_windows + 3)
+        previous_viseme = None
+        viseme_duration = 0
 
         while True:
             audio_chunk = stream.read(CHUNK_SIZE, exception_on_overflow=False)
@@ -68,12 +91,18 @@ def process_live(model, device, d=6):
                 predicted_viseme = torch.argmax(predictions, dim=-1).cpu().numpy()
                 predictions_buffer.append(predicted_viseme)
 
-                # Temporal shift: get the prediction with delay `d`
-                if len(predictions_buffer) > d:
-                    shifted_viseme = predictions_buffer[-(d + 1)]  # Prediction d steps in the past
-                    # Apply noise filtering
+                if len(predictions_buffer) > temporal_shift_windows:
+
                     filtered_viseme = filter_predictions(predictions_buffer)
-                    print(f"Filtered Viseme: {filtered_viseme}")
+
+                    if previous_viseme is None:
+                        previous_viseme = filtered_viseme
+
+                    final_viseme, viseme_duration = remove_single_frame_visemes(filtered_viseme, previous_viseme,
+                                                                                viseme_duration)
+                    previous_viseme = final_viseme
+
+                    print(f"predicted Viseme: {final_viseme}")
                 else:
                     print("Gathering context...")
 
