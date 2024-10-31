@@ -2,6 +2,8 @@ import numpy as np
 import torch
 import pyaudio
 
+from collections import deque
+
 from mfcc_extractor_lib import hard_limiter, extract_features_live
 
 FORMAT = pyaudio.paFloat32
@@ -13,7 +15,30 @@ CHUNK_SIZE = int(RATE * CHUNK_DURATION)
 p = pyaudio.PyAudio()
 
 
-def process_live(model, device, temporal_shift_windows=6):
+def filter_predictions(predictions, window_size=3):
+    """
+    Filter noisy predictions by applying a stability check on viseme transitions.
+
+    Parameters:
+        predictions (deque): A deque holding the recent viseme predictions.
+        window_size (int): Number of predictions to look ahead for stability check (default: 3).
+
+    Returns:
+        int: The filtered viseme prediction.
+    """
+    if len(predictions) < window_size + 1:
+        return predictions[-1]
+
+    if predictions[-1] != predictions[-2]:
+        if all(pred == predictions[-1] for pred in list(predictions)[-window_size:]):
+            return predictions[-1]
+        else:
+            return predictions[-2]
+    else:
+        return predictions[-1]
+
+
+def process_live(model, device, d=6):
 
     stream = p.open(format=FORMAT,
                     channels=CHANNELS,
@@ -24,7 +49,7 @@ def process_live(model, device, temporal_shift_windows=6):
     print("Listening... Press Ctrl+C to stop.")
     try:
         buffer = np.zeros((0,), dtype=np.float32)
-        predictions_buffer = []
+        predictions_buffer = deque(maxlen=d + 3)
 
         while True:
             audio_chunk = stream.read(CHUNK_SIZE, exception_on_overflow=False)
@@ -43,9 +68,12 @@ def process_live(model, device, temporal_shift_windows=6):
                 predicted_viseme = torch.argmax(predictions, dim=-1).cpu().numpy()
                 predictions_buffer.append(predicted_viseme)
 
-                if len(predictions_buffer) > temporal_shift_windows:
-                    shifted_viseme = predictions_buffer.pop(0)
-                    print(f"Predicted Viseme: {shifted_viseme}")
+                # Temporal shift: get the prediction with delay `d`
+                if len(predictions_buffer) > d:
+                    shifted_viseme = predictions_buffer[-(d + 1)]  # Prediction d steps in the past
+                    # Apply noise filtering
+                    filtered_viseme = filter_predictions(predictions_buffer)
+                    print(f"Filtered Viseme: {filtered_viseme}")
                 else:
                     print("Gathering context...")
 
