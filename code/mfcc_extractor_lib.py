@@ -8,8 +8,7 @@ import librosa
 from pydub import AudioSegment
 from pydub.effects import normalize
 import os
-
-import tensorflow as tf
+import torch
 
 
 FORMAT = pyaudio.paFloat32
@@ -49,45 +48,43 @@ def hard_limiter(audio_buffer, sampling_rate, threshold=0.8):
     return limited_buffer
 
 
-def extract_features_live(audio_buffer, sampling_rate, n_mfcc=13, n_fft=256, hop_length=160, n_mels=40, fmax=None):
+def extract_features_live(audio_buffer, sampling_rate, n_mfcc=13, n_fft=400, hop_length=160, n_mels=40, fmax=None):
+    """
+    Extracts features of 3 frames then returns the first one
+
+    """
+    # Normalize the audio buffer
     audio_buffer = audio_buffer.astype(np.float32)
     audio_buffer /= np.max(np.abs(audio_buffer)) + np.finfo(float).eps
 
-    mfcc = librosa.feature.mfcc(y=audio_buffer, sr=sampling_rate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels, fmax=fmax)
+    # Compute MFCCs with a 25ms window and 10ms stride
+    mfcc = librosa.feature.mfcc(y=audio_buffer, sr=sampling_rate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length,
+                                n_mels=n_mels, fmax=fmax)
 
-    if mfcc.shape[1] > 1:
-        delta_width = min(3, mfcc.shape[1])
+    delta_width = 3
 
-        delta_mfcc = librosa.feature.delta(mfcc, width=delta_width)
+    # Calculate smoothed delta MFCC with dynamic width
+    delta_mfcc = librosa.feature.delta(mfcc, order=1, width=delta_width)
 
-        log_energy = librosa.feature.rms(y=audio_buffer, frame_length=n_fft, hop_length=hop_length, center=True)
-        log_energy = np.log(log_energy + np.finfo(float).eps)
+    # Compute log energy for each frame
+    log_energy = librosa.feature.rms(y=audio_buffer, frame_length=n_fft, hop_length=hop_length, center=True)
+    log_energy = np.log(log_energy + np.finfo(float).eps)
 
-        delta_log_energy = librosa.feature.delta(log_energy, width=delta_width)
+    # Calculate smoothed delta log energy with the same dynamic width
+    delta_log_energy = librosa.feature.delta(log_energy, order=1, width=delta_width)
 
-        features = [mfcc, delta_mfcc, log_energy, delta_log_energy]
-    else:
-        features = [mfcc, None, None, None]
+    # Concatenate features for each frame into a single 1x28 vector
+    features = np.concatenate([mfcc, delta_mfcc, log_energy, delta_log_energy], axis=0)
 
-    return features
-
-
-def pad_features(features, max_shape):
-    """
-    Pad the features to ensure they all have the same shape.
-    """
-    padded_features = []
-    for feature in features:
-        padded = np.zeros(max_shape, dtype=np.float32)
-        padded[:feature.shape[0], :feature.shape[1]] = feature  # Copy existing values into the padded array
-        padded_features.append(padded)
-    return np.array(padded_features)
+    # Transpose to return each frame as a 1x28 vector
+    return features.T[0]
 
 
-def process_live(model):
+def process_live(model, device):
     """
     Capture live audio, extract features in real-time, and predict visemes.
     """
+    model.eval()  # Set the model to evaluation mode
     stream = p.open(format=FORMAT,
                     channels=CHANNELS,
                     rate=RATE,
@@ -107,15 +104,14 @@ def process_live(model):
 
                 features = extract_features_live(limited_buffer, RATE)
 
-                max_shape = (13, 3)
+                # Convert to torch tensor and move to GPU if available
+                input_tensor = torch.tensor(features, dtype=torch.float32).to(device)
 
-                padded_features = pad_features(features, max_shape)
+                # Forward pass through the model
+                with torch.no_grad():
+                    predictions = model(input_tensor.view(1, 1, -1))
 
-                padded_features = np.expand_dims(padded_features, axis=0)  # Add batch dimension
-
-                predictions = model.predict(padded_features)
-
-                predicted_viseme = np.argmax(predictions, axis=-1)
+                predicted_viseme = torch.argmax(predictions, dim=-1).cpu().numpy()
                 print(f"Predicted Viseme: {predicted_viseme}")
 
                 buffer = np.zeros((0,), dtype=np.float32)
@@ -307,8 +303,14 @@ def process_all_wav_files_in_folder(folder_path):
     print("All files processed.")
 
 
-#process_all_wav_files_in_folder(r"C:\RESEARCH\2d_lipsync\Dataset generation\data\timit-wav")
-model = tf.keras.models.load_model(r'C:\Users\belle\PycharmProjects\2DLipsync\code\lipsync_model')
-#model.load_weights(r"C:\Users\belle\PycharmProjects\2DLipsync\code\lipsync_model.h5")
-#model.compile(loss=tf.keras.losses.categorical_crossentropy, optimizer=tf.keras.optimizers.Adam(learning_rate=0.001))
-process_live(model)
+# #process_all_wav_files_in_folder(r"C:\RESEARCH\2d_lipsync\Dataset generation\data\timit-wav")
+# #model = tf.keras.models.load_model(r'C:\Users\belle\PycharmProjects\2DLipsync\code\lipsync_model')
+# model = keras.models.load_model(r'C:\Users\belle\PycharmProjects\2DLipsync\code\lipsync_model_2')
+# print(model.input_shape)
+# print(model.summary())
+# #model.load_weights(r"C:\Users\belle\PycharmProjects\2DLipsync\code\lipsync_model.h5")
+# #model.compile(loss=tf.keras.losses.categorical_crossentropy, optimizer=tf.keras.optimizers.Adam(learning_rate=0.001))
+# process_live(model)
+
+features = extract_features_from_file(r"C:\RESEARCH\2d_lipsync\Dataset generation\data\timit-wav\sa1_8.wav", sampling_rate=16000, n_mfcc=13, n_fft=400,
+                          hop_length=160, n_mels=40, fmax=None)
