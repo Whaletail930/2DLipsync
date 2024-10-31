@@ -53,76 +53,24 @@ def extract_features_live(audio_buffer, sampling_rate, n_mfcc=13, n_fft=400, hop
     Extracts features of 3 frames then returns the first one
 
     """
-    # Normalize the audio buffer
     audio_buffer = audio_buffer.astype(np.float32)
     audio_buffer /= np.max(np.abs(audio_buffer)) + np.finfo(float).eps
 
-    # Compute MFCCs with a 25ms window and 10ms stride
     mfcc = librosa.feature.mfcc(y=audio_buffer, sr=sampling_rate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length,
                                 n_mels=n_mels, fmax=fmax)
 
     delta_width = 3
 
-    # Calculate smoothed delta MFCC with dynamic width
     delta_mfcc = librosa.feature.delta(mfcc, order=1, width=delta_width)
 
-    # Compute log energy for each frame
     log_energy = librosa.feature.rms(y=audio_buffer, frame_length=n_fft, hop_length=hop_length, center=True)
     log_energy = np.log(log_energy + np.finfo(float).eps)
 
-    # Calculate smoothed delta log energy with the same dynamic width
     delta_log_energy = librosa.feature.delta(log_energy, order=1, width=delta_width)
 
-    # Concatenate features for each frame into a single 1x28 vector
     features = np.concatenate([mfcc, delta_mfcc, log_energy, delta_log_energy], axis=0)
 
-    # Transpose to return each frame as a 1x28 vector
     return features.T[0]
-
-
-def process_live(model, device):
-    """
-    Capture live audio, extract features in real-time, and predict visemes.
-    """
-    model.eval()  # Set the model to evaluation mode
-    stream = p.open(format=FORMAT,
-                    channels=CHANNELS,
-                    rate=RATE,
-                    input=True,
-                    frames_per_buffer=CHUNK_SIZE)
-
-    print("Listening... Press Ctrl+C to stop.")
-    try:
-        buffer = np.zeros((0,), dtype=np.float32)  # Initialize an empty buffer
-        while True:
-            audio_chunk = stream.read(CHUNK_SIZE, exception_on_overflow=False)
-            audio_buffer = np.frombuffer(audio_chunk, dtype=np.float32)
-            buffer = np.concatenate([buffer, audio_buffer])
-
-            if len(buffer) >= CHUNK_SIZE:
-                limited_buffer = hard_limiter(buffer, RATE)
-
-                features = extract_features_live(limited_buffer, RATE)
-
-                # Convert to torch tensor and move to GPU if available
-                input_tensor = torch.tensor(features, dtype=torch.float32).to(device)
-
-                # Forward pass through the model
-                with torch.no_grad():
-                    predictions = model(input_tensor.view(1, 1, -1))
-
-                predicted_viseme = torch.argmax(predictions, dim=-1).cpu().numpy()
-                print(f"Predicted Viseme: {predicted_viseme}")
-
-                buffer = np.zeros((0,), dtype=np.float32)
-
-    except KeyboardInterrupt:
-        print("Stream stopped")
-
-    finally:
-        stream.stop_stream()
-        stream.close()
-        p.terminate()
 
 
 def extract_features_from_file(file_path, sampling_rate=16000, n_mfcc=13, n_fft=400, hop_length=160, n_mels=40, fmax=None):
