@@ -1,4 +1,5 @@
 import numpy as np
+import time
 import torch
 import pyaudio
 
@@ -75,6 +76,8 @@ def process_live(model, device, temporal_shift_windows=6):
         viseme_duration = 0
 
         while True:
+            start_time = time.time()
+
             audio_chunk = stream.read(CHUNK_SIZE, exception_on_overflow=False)
             audio_buffer = np.frombuffer(audio_chunk, dtype=np.float32)
             buffer = np.concatenate([buffer, audio_buffer])
@@ -92,17 +95,18 @@ def process_live(model, device, temporal_shift_windows=6):
                 predictions_buffer.append(predicted_viseme)
 
                 if len(predictions_buffer) > temporal_shift_windows:
-
                     filtered_viseme = filter_predictions(predictions_buffer)
 
                     if previous_viseme is None:
                         previous_viseme = filtered_viseme
 
-                    final_viseme, viseme_duration = remove_single_frame_visemes(filtered_viseme, previous_viseme,
-                                                                                viseme_duration)
+                    final_viseme, viseme_duration = remove_single_frame_visemes(
+                        filtered_viseme, previous_viseme, viseme_duration
+                    )
                     previous_viseme = final_viseme
 
-                    print(f"predicted Viseme: {final_viseme}")
+                    elapsed_time = (time.time() - start_time) * 1000
+                    print(f"Predicted Viseme: {final_viseme}, Time Elapsed: {elapsed_time:.2f} ms")
                 else:
                     print("Gathering context...")
 
