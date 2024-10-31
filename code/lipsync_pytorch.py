@@ -106,7 +106,7 @@ def process_live(model, device, temporal_shift_windows=6):
                     previous_viseme = final_viseme
 
                     elapsed_time = (time.time() - start_time) * 1000
-                    print(f"Predicted Viseme: {final_viseme}, Time Elapsed: {elapsed_time:.2f} ms")
+                    yield final_viseme, elapsed_time
                 else:
                     print("Gathering context...")
 
@@ -128,6 +128,10 @@ def run_lipsync():
 
     model.to(device)
 
-    process_live(model, device)
+    for viseme, elapsed_time in process_live(model, device):
+        print(f"Predicted Viseme: {viseme}, Time Elapsed: {elapsed_time:.2f} ms")
+
+        yield int(str(viseme).strip('[]')) #temporarily here to test animation
+
 
 run_lipsync()
