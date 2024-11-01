@@ -9,8 +9,10 @@ from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 
 from LipsyncModel import LipsyncModel
 
-# Check if CUDA (GPU) is available
+gpu_name = torch.cuda.get_device_name(0)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if device == torch.device('cuda'):
+    print(f"Using gpu: {gpu_name}")
 print(device)
 
 
@@ -95,48 +97,44 @@ def data_generator(folder_path, batch_size=1, steps_per_epoch=None):
             try:
                 labels_encoded = label_encoder.transform(df['label'])
 
-                # Debugging: Print unique labels in this file
                 print(f"Unique labels in this file: {np.unique(labels_encoded)}")
 
-                # Ensure all labels are in the valid range
                 assert np.all(labels_encoded >= 0) and np.all(labels_encoded < num_visemes), \
                     f"Invalid label found. Labels should be in the range [0, {num_visemes - 1}]"
 
                 features = df.drop(columns=['label']).apply(pd.to_numeric, errors='coerce')
-                features = features.values.reshape((features.shape[0], 1, features.shape[1]))  # Reshape for LSTM
+                features = features.values.reshape((features.shape[0], 1, features.shape[1]))
 
-                # Accumulate features and labels from the file
                 for i in range(features.shape[0]):
                     batch_features.append(features[i])
                     batch_labels.append(labels_encoded[i])
 
-                    # Yield the batch once the specified batch_size is reached
                     if len(batch_features) == batch_size:
                         steps += 1
 
+                        batch_features_array = np.array(batch_features)
                         yield (
-                            torch.tensor(batch_features, dtype=torch.float32).to(device),
+                            torch.tensor(batch_features_array, dtype=torch.float32).to(device),
                             torch.tensor(batch_labels, dtype=torch.long).to(device)
                         )
 
-                        # Reset batch lists after yielding
                         batch_features = []
                         batch_labels = []
 
-                        # Stop yielding if the number of steps for the epoch is reached
                         if steps_per_epoch and steps >= steps_per_epoch:
-                            steps = 0  # Reset step counter for the next epoch
+                            steps = 0
                             return
 
             except Exception as e:
                 print(f"Error processing file {file_name}: {e}")
                 continue
 
-        # Yield any remaining data if it didn't complete a full batch
         if batch_features:
             steps += 1
+
+            batch_features_array = np.array(batch_features)
             yield (
-                torch.tensor(batch_features, dtype=torch.float32).to(device),
+                torch.tensor(batch_features_array, dtype=torch.float32).to(device),
                 torch.tensor(batch_labels, dtype=torch.long).to(device)
             )
             batch_features = []
@@ -186,15 +184,9 @@ folder_path = r'C:\Users\belle\PycharmProjects\2DLipsync\DATA\training'
 first_batch, _ = next(data_generator(folder_path, batch_size=10, steps_per_epoch=1))
 input_size = first_batch.shape[2]
 num_visemes = 9
-
-# Instantiate the model
 model = LipsyncModel(input_size=input_size, num_visemes=num_visemes)
 
-# Calculate steps per epoch based on the dataset
 steps_per_epoch = count_steps_per_epoch(folder_path, batch_size=10)
-
-# Train the model
 train_model(model, folder_path, batch_size=10, num_epochs=200, learning_rate=0.001, steps_per_epoch=steps_per_epoch)
 
-# Save the model after training
-torch.save(model, 'lipsync_model_entire.pth')
+torch.save(model, 'lipsync_model_test.pth')
