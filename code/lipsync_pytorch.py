@@ -10,8 +10,11 @@ from mfcc_extractor_lib import hard_limiter, extract_features_live
 FORMAT = pyaudio.paFloat32
 CHANNELS = 1
 RATE = 16000
-CHUNK_DURATION = 0.025
-CHUNK_SIZE = int(RATE * CHUNK_DURATION)
+WINDOW_DURATION = 0.025
+STRIDE_DURATION = 0.01
+
+CHUNK_SIZE = int(RATE * WINDOW_DURATION)
+STRIDE_SIZE = int(RATE * STRIDE_DURATION)
 
 p = pyaudio.PyAudio()
 
@@ -61,29 +64,31 @@ def remove_single_frame_visemes(current_viseme, previous_viseme, viseme_duration
 
 
 def process_live(model, device, temporal_shift_windows=6):
+    predictions_buffer = deque(maxlen=temporal_shift_windows + 3)
+    previous_viseme = None
+    viseme_duration = 0
+    buffer = np.zeros((0,), dtype=np.float32)
+    prediction_counter = 0
 
     stream = p.open(format=FORMAT,
                     channels=CHANNELS,
                     rate=RATE,
                     input=True,
-                    frames_per_buffer=CHUNK_SIZE)
+                    frames_per_buffer=STRIDE_SIZE)
 
     print("Listening... Press Ctrl+C to stop.")
-    try:
-        buffer = np.zeros((0,), dtype=np.float32)
-        predictions_buffer = deque(maxlen=temporal_shift_windows + 3)
-        previous_viseme = None
-        viseme_duration = 0
 
+    try:
         while True:
             start_time = time.time()
 
-            audio_chunk = stream.read(CHUNK_SIZE, exception_on_overflow=False)
+            audio_chunk = stream.read(STRIDE_SIZE, exception_on_overflow=False)
             audio_buffer = np.frombuffer(audio_chunk, dtype=np.float32)
+
             buffer = np.concatenate([buffer, audio_buffer])
 
             if len(buffer) >= CHUNK_SIZE:
-                limited_buffer = hard_limiter(buffer, RATE)
+                limited_buffer = hard_limiter(buffer[:CHUNK_SIZE], RATE)
                 features = extract_features_live(limited_buffer, RATE)
 
                 input_tensor = torch.tensor(features, dtype=torch.float32).to(device)
@@ -92,25 +97,26 @@ def process_live(model, device, temporal_shift_windows=6):
                     predictions = model(input_tensor.view(1, 1, -1))
 
                 predicted_viseme = torch.argmax(predictions, dim=-1).cpu().numpy()
-                predictions_buffer.append(predicted_viseme)
+                prediction_counter += 1
 
-                if len(predictions_buffer) > temporal_shift_windows:
-                    filtered_viseme = filter_predictions(predictions_buffer)
+                if prediction_counter % 4 == 0:
+                    predictions_buffer.append(predicted_viseme)
 
-                    if previous_viseme is None:
-                        previous_viseme = filtered_viseme
+                    if len(predictions_buffer) > temporal_shift_windows:
+                        filtered_viseme = filter_predictions(predictions_buffer)
 
-                    final_viseme, viseme_duration = remove_single_frame_visemes(
-                        filtered_viseme, previous_viseme, viseme_duration
-                    )
-                    previous_viseme = final_viseme
+                        if previous_viseme is None:
+                            previous_viseme = filtered_viseme
 
-                    elapsed_time = (time.time() - start_time) * 1000
-                    yield final_viseme, elapsed_time
-                else:
-                    print("Gathering context...")
+                        final_viseme, viseme_duration = remove_single_frame_visemes(
+                            filtered_viseme, previous_viseme, viseme_duration
+                        )
+                        previous_viseme = final_viseme
 
-                buffer = np.zeros((0,), dtype=np.float32)
+                        elapsed_time = (time.time() - start_time) * 1000
+                        yield final_viseme, elapsed_time
+
+                buffer = buffer[STRIDE_SIZE:]
 
     except KeyboardInterrupt:
         print("Stream stopped")

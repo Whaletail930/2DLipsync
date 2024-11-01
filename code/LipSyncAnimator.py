@@ -68,4 +68,4 @@ class LipSyncAnimator:
         except queue.Empty:
             pass
 
-        self.root.after(15, self.update_image)  # Adjust interval as needed
+        self.root.after(10, self.update_image)
