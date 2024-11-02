@@ -2,19 +2,66 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Viseme Predictions</title>
+    <title>Live Viseme Predictions</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+
+        .center-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        img {
+            width: 400px;
+            margin-top: 20px;
+        }
+    </style>
 </head>
 <body>
-    <h1>Live Viseme Predictions</h1>
-    <p id="viseme-display">Waiting for predictions...</p>
+    <div class="center-content">
+        <h1>Live Viseme Predictions</h1>
+        <img id="viseme-image" src="static/viseme_images/A.png" alt="Viseme Image">
+    </div>
 
     <!-- Socket.IO -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.min.js"></script>
     <script type="text/javascript">
+        // Preload images
+        const imageMapping = {
+            0: 'static/viseme_images/A.png',
+            1: 'static/viseme_images/B.png',
+            2: 'static/viseme_images/C.png',
+            3: 'static/viseme_images/D.png',
+            4: 'static/viseme_images/E.png',
+            5: 'static/viseme_images/F.png',
+            6: 'static/viseme_images/G.png',
+            7: 'static/viseme_images/H.png',
+            8: 'static/viseme_images/X.png',
+        };
+
+        const preloadImages = () => {
+            Object.values(imageMapping).forEach(src => {
+                const img = new Image();
+                img.src = src;
+            });
+        };
+
+        preloadImages();
+
         const socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
 
         socket.on('new_prediction', function(data) {
-            document.getElementById('viseme-display').innerText = 'Predicted Viseme: ' + data.viseme;
+            const visemeImage = document.getElementById('viseme-image');
+            visemeImage.src = data.image_url + '?' + new Date().getTime();
         });
     </script>
 </body>
