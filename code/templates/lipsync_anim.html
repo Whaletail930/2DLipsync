@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Viseme Predictions</title>
+</head>
+<body>
+    <h1>Live Viseme Predictions</h1>
+    <p id="viseme-display">Waiting for predictions...</p>
+
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.min.js"></script>
+    <script type="text/javascript">
+        const socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
+
+        socket.on('new_prediction', function(data) {
+            document.getElementById('viseme-display').innerText = 'Predicted Viseme: ' + data.viseme;
+        });
+    </script>
+</body>
+</html>
