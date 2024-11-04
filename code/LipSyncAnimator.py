@@ -4,7 +4,10 @@ import os
 import threading
 import queue
 
+from mfcc_extractor_lib import setup_logger
 from lipsync_pytorch import run_lipsync
+
+logger = setup_logger(script_name=os.path.splitext(os.path.basename(__file__))[0])
 
 
 class LipSyncAnimator:
@@ -63,7 +66,7 @@ class LipSyncAnimator:
                         self.image_label.config(image=img_tk)
                         self.image_label.image = img_tk
                     else:
-                        print(f"Image not found for viseme: {new_viseme}")
+                        logger.error(f"Image not found for viseme: {new_viseme}")
 
         except queue.Empty:
             pass

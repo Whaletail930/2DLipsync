@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import time
 import torch
@@ -5,7 +7,7 @@ import pyaudio
 
 from collections import deque
 
-from mfcc_extractor_lib import hard_limiter, extract_features_live
+from mfcc_extractor_lib import hard_limiter, extract_features_live, setup_logger
 
 FORMAT = pyaudio.paFloat32
 CHANNELS = 1
@@ -17,6 +19,19 @@ CHUNK_SIZE = int(RATE * WINDOW_DURATION)
 STRIDE_SIZE = int(RATE * STRIDE_DURATION)
 
 p = pyaudio.PyAudio()
+logger = setup_logger(script_name=os.path.splitext(os.path.basename(__file__))[0])
+
+
+def log_microphone_info(audio):
+
+    try:
+        default_device_info = audio.get_default_input_device_info()
+
+        logger.info(f"Host API: {audio.get_host_api_info_by_index(default_device_info['hostApi'])['name']}")
+        logger.info(f"Microphone info: {default_device_info}")
+
+    except IOError as e:
+        logger.error(f"Could not access the default input device. Error: {e}")
 
 
 def filter_predictions(predictions, window_size=3):
@@ -129,6 +144,7 @@ def process_live(model, device, temporal_shift_windows=6):
     stream = initialize_stream()
 
     print("Listening... Press Ctrl+C to stop.")
+    log_microphone_info(p)
 
     try:
         while True:
@@ -155,6 +171,7 @@ def process_live(model, device, temporal_shift_windows=6):
 
     except KeyboardInterrupt:
         print("Stream stopped")
+        logger.info("Stream stopped")
 
     finally:
         stream.stop_stream()
@@ -163,13 +180,27 @@ def process_live(model, device, temporal_shift_windows=6):
 
 
 def run_lipsync():
+
+    logger.info("Attempting to find GPU...")
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device_name = torch.cuda.get_device_name(0)
+
+    logger.info(f"Device found: {device_name}")
+    logger.debug("USING CPU FOR NOW")  # Do something about this
+    logger.info("Loading model...")
 
     model = torch.load('lipsync_model_entire.pth', map_location=device)
 
     model.to(device)
 
+    logger.info("Model successfully loaded")
+    logger.info("Starting predictions")
+
     for viseme, elapsed_time in process_live(model, device):
-        print(f"Predicted Viseme: {viseme}, Time Elapsed: {elapsed_time:.2f} ms")
+        print(f"Predicted Viseme: {viseme}, Time Elapsed: {elapsed_time:.2f} ms")  # remove this
+        logger.info(f"Predicted Viseme: {viseme}, Time Elapsed: {elapsed_time:.2f} ms")
 
         yield int(str(viseme).strip('[]')) #temporarily here to test animation
+
+    logger.info("Process terminated")

@@ -8,12 +8,14 @@ import torch.optim as optim
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 
 from LipsyncModel import LipsyncModel
+from mfcc_extractor_lib import setup_logger
+
+logger = setup_logger(script_name=os.path.splitext(os.path.basename(__file__))[0])
 
 gpu_name = torch.cuda.get_device_name(0)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 if device == torch.device('cuda'):
-    print(f"Using gpu: {gpu_name}")
-print(device)
+    logger.info(f"Using gpu: {gpu_name}")
 
 
 def load_json(file_path):
@@ -97,7 +99,7 @@ def data_generator(folder_path, batch_size=1, steps_per_epoch=None):
             try:
                 labels_encoded = label_encoder.transform(df['label'])
 
-                print(f"Unique labels in this file: {np.unique(labels_encoded)}")
+                logger.info(f"Unique labels in this file: {np.unique(labels_encoded)}")
 
                 assert np.all(labels_encoded >= 0) and np.all(labels_encoded < num_visemes), \
                     f"Invalid label found. Labels should be in the range [0, {num_visemes - 1}]"
@@ -126,7 +128,7 @@ def data_generator(folder_path, batch_size=1, steps_per_epoch=None):
                             return
 
             except Exception as e:
-                print(f"Error processing file {file_name}: {e}")
+                logger.error(f"Error processing file {file_name}: {e}")
                 continue
 
         if batch_features:
@@ -174,6 +176,7 @@ def train_model(model, folder_path, batch_size, num_epochs, learning_rate, steps
             running_loss += loss.item()
             if (i + 1) % 10 == 0:
                 print(f'Epoch [{epoch + 1}/{num_epochs}], Step [{i + 1}/{steps_per_epoch}], Loss: {running_loss / 10:.4f}')
+                logger.info(f'Epoch [{epoch + 1}/{num_epochs}], Step [{i + 1}/{steps_per_epoch}], Loss: {running_loss / 10:.4f}')
                 running_loss = 0.0
 
     print('Training complete.')

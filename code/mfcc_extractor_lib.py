@@ -1,14 +1,15 @@
 import json
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import pyaudio
 import librosa
+import logging
 from pydub import AudioSegment
 from pydub.effects import normalize
 import os
-import torch
 
 
 FORMAT = pyaudio.paFloat32
@@ -21,7 +22,28 @@ STRIDE_SIZE = int(RATE * STRIDE_DURATION)
 
 p = pyaudio.PyAudio()
 
-OUTPUT_FOLDER = Path(__file__).resolve().parent.parent / "OUTPUT"
+OUTPUT_DIR = Path(__file__).resolve().parent.parent / "OUTPUT"
+DATA_DIR = Path(__file__).resolve().parent.parent / "DATA"
+
+
+def setup_logger(script_name):
+
+    current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_filename = DATA_DIR / "logs" / f"lipsync_{current_time}.log"
+
+    logger = logging.getLogger(script_name)
+    logger.setLevel(logging.DEBUG)
+
+    file_handler = logging.FileHandler(log_filename)
+
+    formatter = logging.Formatter(
+        f'%(asctime)s - {script_name} - %(levelname)s - %(message)s'
+    )
+    file_handler.setFormatter(formatter)
+
+    logger.addHandler(file_handler)
+
+    return logger
 
 
 def hard_limiter(audio_buffer, sampling_rate, threshold=0.8):
@@ -181,7 +203,7 @@ def pair_mouthcues_with_features(features_file, mouthcues_file, output_file):
 def process_features_file(rec_file_path):
 
     recording_name = Path(rec_file_path).name.strip('.wav')
-    output_path_json = Path(OUTPUT_FOLDER / f"{recording_name}_features.json")
+    output_path_json = Path(OUTPUT_DIR / f"{recording_name}_features.json")
 
     save_features_to_file(rec_file_path, output_path_json)
 
@@ -192,7 +214,7 @@ def combine_data(mouthcue_file, features_file):
 
     file_name = Path(features_file).name.strip('_features.wav')
 
-    output_file = Path(OUTPUT_FOLDER / f"{file_name.strip('.json')}_combined.json")
+    output_file = Path(OUTPUT_DIR / f"{file_name.strip('.json')}_combined.json")
 
     pair_mouthcues_with_features(features_file, mouthcue_file, output_file)
 
@@ -202,7 +224,7 @@ def combine_data(mouthcue_file, features_file):
 def run_rhubarb_lipsync(recording_wav):
 
     recording_name = Path(recording_wav).name.strip('.wav')
-    output_file = Path(OUTPUT_FOLDER / f"{recording_name}_visemes.json")
+    output_file = Path(OUTPUT_DIR / f"{recording_name}_visemes.json")
     rhubarb_path = r"C:\RESEARCH\2d_lipsync\Dataset generation\Rhubarb-Lip-Sync-1.13.0-Windows\rhubarb.exe"
 
     try:
