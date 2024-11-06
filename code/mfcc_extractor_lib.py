@@ -200,31 +200,32 @@ def pair_mouthcues_with_features(features_file, mouthcues_file, output_file):
     print(f"Paired data saved to {output_file}")
 
 
-def process_features_file(rec_file_path):
+def process_features_file(rec_file_path, data_type):
 
     recording_name = Path(rec_file_path).name.strip('.wav')
-    output_path_json = Path(OUTPUT_DIR / f"{recording_name}_features.json")
+    output_path_json = Path(OUTPUT_DIR / "features" / data_type / f"{recording_name}_features.json")
 
     save_features_to_file(rec_file_path, output_path_json)
 
     return output_path_json
 
 
-def combine_data(mouthcue_file, features_file):
+def combine_data(mouthcue_file, features_file, data_type):
 
     file_name = Path(features_file).name.strip('_features.wav')
 
-    output_file = Path(OUTPUT_DIR / f"{file_name.strip('.json')}_combined.json")
+    output_file = Path(OUTPUT_DIR / data_type / f"{file_name.strip('.json')}_combined.json")
+    output_file.parent.mkdir(parents=True, exist_ok=True)
 
     pair_mouthcues_with_features(features_file, mouthcue_file, output_file)
 
     return output_file
 
 
-def run_rhubarb_lipsync(recording_wav):
+def run_rhubarb_lipsync(recording_wav, data_type):
 
     recording_name = Path(recording_wav).name.strip('.wav')
-    output_file = Path(OUTPUT_DIR / f"{recording_name}_visemes.json")
+    output_file = Path(OUTPUT_DIR / "rhubarb_output" / data_type / f"{recording_name}_visemes.json")
     rhubarb_path = r"C:\RESEARCH\2d_lipsync\Dataset generation\Rhubarb-Lip-Sync-1.13.0-Windows\rhubarb.exe"
 
     try:
@@ -239,41 +240,45 @@ def run_rhubarb_lipsync(recording_wav):
         return None
 
 
-def create_training_data(rec_file_path):
+def create_training_data(rec_file_path, data_type):
 
     print(f"Extracting features from {Path(rec_file_path).name}")
-    features_file = process_features_file(rec_file_path)
+    features_file = process_features_file(rec_file_path, data_type)
     print("Successfully extracted features")
     print(f"Generating visemes from {Path(rec_file_path).name}")
-    mouthcues_file = run_rhubarb_lipsync(Path(rec_file_path))
+    mouthcues_file = run_rhubarb_lipsync(Path(rec_file_path), data_type)
     print("Successfully generated visemes")
     print(f"Combining {mouthcues_file.name} and {features_file.name}")
-    combined_data = combine_data(mouthcues_file, features_file)
+    combined_data = combine_data(mouthcues_file, features_file, data_type)
     print("Training data successfully created")
 
     return combined_data
 
 
-def process_all_wav_files_in_folder(folder_path):
-    folder_path = Path(folder_path)
-    wav_files = list(folder_path.glob("*.wav"))
+def process_wav_files(base_dir, folder_type, sph2pipe_path):
+    """
+    Process only .wav files within the specified folder, converting .WAV files in place using sph2pipe.
+    """
+    if folder_type not in ['TRAIN', 'TEST']:
+        raise ValueError("folder_type must be 'TRAIN' or 'TEST'")
 
-    if not wav_files:
-        print(f"No .wav files found in {folder_path}")
-        return
+    target_dir = Path(base_dir) / folder_type
 
-    for wav_file in wav_files:
-        try:
-            print(f"Processing {wav_file.name}...")
-            create_training_data(wav_file)
-            print(f"Successfully processed {wav_file.name}")
-        except Exception as e:
-            print(f"Error processing {wav_file.name}: {e}")
+    for root, subdirs, files in os.walk(target_dir):
+        for file in files:
+            if file.endswith('.WAV'):
+                file_path = Path(root) / file
+                output_path = file_path.with_name(file_path.stem + '_converted' + '.wav')
 
-    print("All files processed.")
+                # Convert SPHERE/NIST files to waveform
+                subprocess.run([sph2pipe_path, '-f', 'wav', str(file_path), str(output_path)], check=True)
+
+                file_path.unlink()
+
+                create_training_data(output_path, folder_type)
+                print(f"Processed and converted {output_path}")
 
 
-# #process_all_wav_files_in_folder(r"C:\RESEARCH\2d_lipsync\Dataset generation\data\timit-wav")
 # #model = tf.keras.models.load_model(r'C:\Users\belle\PycharmProjects\2DLipsync\code\lipsync_model')
 # model = keras.models.load_model(r'C:\Users\belle\PycharmProjects\2DLipsync\code\lipsync_model_2')
 # print(model.input_shape)
@@ -282,5 +287,4 @@ def process_all_wav_files_in_folder(folder_path):
 # #model.compile(loss=tf.keras.losses.categorical_crossentropy, optimizer=tf.keras.optimizers.Adam(learning_rate=0.001))
 # process_live(model)
 
-features = extract_features_from_file(r"C:\RESEARCH\2d_lipsync\Dataset generation\data\timit-wav\sa1_8.wav", sampling_rate=16000, n_mfcc=13, n_fft=400,
-                          hop_length=160, n_mels=40, fmax=None)
+process_wav_files(r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\TIMIT", "TEST", r"C:\RESEARCH\2d_lipsync\Dataset generation\sph_conversion\sph2pipe_v2.5\sph2pipe.exe")
