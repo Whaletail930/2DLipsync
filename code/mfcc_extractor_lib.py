@@ -255,28 +255,37 @@ def create_training_data(rec_file_path, data_type):
     return combined_data
 
 
-def process_wav_files(base_dir, folder_type, sph2pipe_path):
+def process_wav_files(base_dir, folder_type, converter_path):
     """
     Process only .wav files within the specified folder, converting .WAV files in place using sph2pipe.
     """
-    if folder_type not in ['TRAIN', 'TEST']:
-        raise ValueError("folder_type must be 'TRAIN' or 'TEST'")
 
     target_dir = Path(base_dir) / folder_type
+    processed_count = 0
 
     for root, subdirs, files in os.walk(target_dir):
         for file in files:
             if file.endswith('.WAV'):
                 file_path = Path(root) / file
+                logger.info(f"Processing {file_path}")
                 output_path = file_path.with_name(file_path.stem + '_converted' + '.wav')
 
-                # Convert SPHERE/NIST files to waveform
-                subprocess.run([sph2pipe_path, '-f', 'wav', str(file_path), str(output_path)], check=True)
+                # Convert SPHERE/NIST files to waveform using sph2pipe
+                # subprocess.run([converter_path, '-f', 'wav', str(file_path), str(output_path)], check=True)
+
+                # Convert SPHERE/NIST files to waveform using sox
+                subprocess.run([converter_path, str(file_path), str(output_path)], check=True)
+
+                logger.info(f"Success: {output_path}")
 
                 file_path.unlink()
 
                 create_training_data(output_path, folder_type)
+
                 print(f"Processed and converted {output_path}")
+                processed_count += 1
+
+    print(f"All done. Files processed: {processed_count}")
 
 
 # #model = tf.keras.models.load_model(r'C:\Users\belle\PycharmProjects\2DLipsync\code\lipsync_model')
@@ -287,4 +296,6 @@ def process_wav_files(base_dir, folder_type, sph2pipe_path):
 # #model.compile(loss=tf.keras.losses.categorical_crossentropy, optimizer=tf.keras.optimizers.Adam(learning_rate=0.001))
 # process_live(model)
 
-process_wav_files(r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\TIMIT", "TEST", r"C:\RESEARCH\2d_lipsync\Dataset generation\sph_conversion\sph2pipe_v2.5\sph2pipe.exe")
+
+logger = setup_logger(script_name=os.path.splitext(os.path.basename(__file__))[0])
+process_wav_files(r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\TIMIT", "TEST", r"C:\RESEARCH\2d_lipsync\sox\sox-14-4-2\sox.exe")
