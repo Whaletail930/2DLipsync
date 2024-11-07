@@ -255,7 +255,7 @@ def create_training_data(rec_file_path, data_type):
     return combined_data
 
 
-def process_wav_files(base_dir, folder_type, converter_path):
+def process_wav_files(base_dir, folder_type):
     """
     Process only .wav files within the specified folder, converting .WAV files in place using sph2pipe.
     """
@@ -265,24 +265,16 @@ def process_wav_files(base_dir, folder_type, converter_path):
 
     for root, subdirs, files in os.walk(target_dir):
         for file in files:
-            if file.endswith('.WAV'):
+            if file.endswith('.wav'):
+                new_file = f"{str(file).strip('.wav')}_{processed_count}.wav"
+                new_file_path = Path(root) / new_file
                 file_path = Path(root) / file
+                os.rename(file_path, new_file_path)
                 logger.info(f"Processing {file_path}")
-                output_path = file_path.with_name(file_path.stem + '_converted' + '.wav')
 
-                # Convert SPHERE/NIST files to waveform using sph2pipe
-                # subprocess.run([converter_path, '-f', 'wav', str(file_path), str(output_path)], check=True)
+                create_training_data(new_file_path, folder_type)
 
-                # Convert SPHERE/NIST files to waveform using sox
-                subprocess.run([converter_path, str(file_path), str(output_path)], check=True)
-
-                logger.info(f"Success: {output_path}")
-
-                file_path.unlink()
-
-                create_training_data(output_path, folder_type)
-
-                print(f"Processed and converted {output_path}")
+                print(f"Processed and converted {new_file_path}")
                 processed_count += 1
 
     print(f"All done. Files processed: {processed_count}")
@@ -298,4 +290,4 @@ def process_wav_files(base_dir, folder_type, converter_path):
 
 
 logger = setup_logger(script_name=os.path.splitext(os.path.basename(__file__))[0])
-process_wav_files(r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\TIMIT", "TEST", r"C:\RESEARCH\2d_lipsync\sox\sox-14-4-2\sox.exe")
+process_wav_files(r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\TIMIT", "train")
