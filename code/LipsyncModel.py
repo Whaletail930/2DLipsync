@@ -22,7 +22,7 @@ class LipsyncModel(nn.Module):
         self.fc = nn.Linear(200, num_visemes)
         self.decoder = DecodingLayer(label_mapping)  # Decoding layer
 
-    def forward(self, input_tensor, decode=False):
+    def forward(self, input_tensor, decode=True):
         """
         :param input_tensor: The input tensor for the model
         :param decode: Set to False during training, True during inference
