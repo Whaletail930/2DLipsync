@@ -194,7 +194,6 @@ def pair_mouthcues_with_features(features_file, mouthcues_file, output_file):
             "delta_log_energy": feature["delta_log_energy"]
         })
 
-    # Save the paired data to the output file
     with open(output_file, 'w') as f:
         json.dump(paired_data, f, indent=4)
     print(f"Paired data saved to {output_file}")
@@ -289,5 +288,5 @@ def process_wav_files(base_dir, folder_type):
 # process_live(model)
 
 
-logger = setup_logger(script_name=os.path.splitext(os.path.basename(__file__))[0])
-process_wav_files(r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\TIMIT", "train")
+# logger = setup_logger(script_name=os.path.splitext(os.path.basename(__file__))[0])
+# process_wav_files(r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\TIMIT", "train")

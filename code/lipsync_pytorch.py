@@ -1,10 +1,12 @@
 import os
 
+import librosa
 import numpy as np
 import time
 import torch
 import pyaudio
 
+from scipy.signal import wiener
 from collections import deque
 
 from mfcc_extractor_lib import hard_limiter, extract_features_live, setup_logger
@@ -105,9 +107,10 @@ def make_prediction(model, device, features):
     with torch.no_grad():
         predictions = model(input_tensor.view(1, 1, -1))
 
-    most_likely_prediction = torch.argmax(predictions, dim=-1).cpu().numpy()
+        #most_likely_prediction = torch.argmax(predictions, dim=-1).cpu().numpy()
 
-    return most_likely_prediction
+    #return most_likely_prediction
+    return predictions
 
 
 def update_predictions_buffer(predictions_buffer, prediction, prediction_counter, temporal_shift_windows):
@@ -134,7 +137,34 @@ def process_final_viseme(predictions_buffer, previous_viseme, viseme_duration):
     return final_viseme, viseme_duration
 
 
-def process_live(model, device, temporal_shift_windows=6):
+def estimate_noise_profile(duration_sec=1):
+    """Capture a short segment of audio to estimate the noise profile."""
+    print("Estimating noise profile, please hold still...")
+    stream = initialize_stream()
+    noise_samples = []
+    for _ in range(int(RATE / STRIDE_SIZE * duration_sec)):
+        noise_samples.append(read_audio_chunk_to_array(stream))
+    stream.stop_stream()
+    stream.close()
+    noise_profile = np.concatenate(noise_samples)
+    print("Noise profile estimated.")
+    return noise_profile
+
+
+def apply_noise_reduction(buffer, noise_profile):
+
+    if np.var(noise_profile) > 0.01:
+        reduced_noise_buffer = buffer - noise_profile[:len(buffer)]
+        reduced_noise_buffer = wiener(reduced_noise_buffer)
+    else:
+        reduced_noise_buffer = buffer - noise_profile[:len(buffer)]
+
+    reduced_noise_buffer = np.nan_to_num(reduced_noise_buffer)
+    return reduced_noise_buffer
+
+
+def process_live(model, device, temporal_shift_windows=6, db_threshold=-35):
+    noise_profile = estimate_noise_profile()
 
     predictions_buffer = deque(maxlen=temporal_shift_windows + 3)
     previous_viseme = None
@@ -149,30 +179,39 @@ def process_live(model, device, temporal_shift_windows=6):
     try:
         while True:
             start_time = time.time()
-
             audio_buffer = read_audio_chunk_to_array(stream)
             buffer = np.concatenate([buffer, audio_buffer])
 
             if len(buffer) >= CHUNK_SIZE:
-                limited_buffer = hard_limiter(buffer[:CHUNK_SIZE], RATE)
-                features = extract_features_live(limited_buffer, RATE)
-                predicted_viseme = make_prediction(model, device, features)
-                prediction_counter += 1
+                buffer_noisy_reduced = apply_noise_reduction(buffer[:CHUNK_SIZE], noise_profile)
 
-                updated_buffer = update_predictions_buffer(predictions_buffer, predicted_viseme, prediction_counter, temporal_shift_windows)
-                if updated_buffer:
-                    final_viseme, viseme_duration = process_final_viseme(predictions_buffer, previous_viseme, viseme_duration)
-                    previous_viseme = final_viseme
+                db_level = librosa.amplitude_to_db(np.abs(librosa.stft(buffer_noisy_reduced, n_fft=256)), ref=np.max).mean()
+                print(f"dB Level: {db_level:.2f} dB")
 
+                if db_level >= db_threshold:
+                    limited_buffer = hard_limiter(buffer_noisy_reduced, RATE)
+                    features = extract_features_live(limited_buffer, RATE)
+                    predicted_viseme = make_prediction(model, device, features)
+                    prediction_counter += 1
+
+                    updated_buffer = update_predictions_buffer(predictions_buffer, predicted_viseme, prediction_counter, temporal_shift_windows)
+                    if updated_buffer:
+                        final_viseme, viseme_duration = process_final_viseme(predictions_buffer, previous_viseme, viseme_duration)
+                        previous_viseme = final_viseme
+
+                        elapsed_time = (time.time() - start_time) * 1000
+                        yield final_viseme, elapsed_time
+
+                    buffer = buffer[CHUNK_SIZE:]
+                else:
                     elapsed_time = (time.time() - start_time) * 1000
-                    yield final_viseme, elapsed_time
-
-                buffer = buffer[STRIDE_SIZE:]
+                    print("Input below threshold, outputting 'X'.")
+                    yield 'X', elapsed_time
+                    buffer = buffer[CHUNK_SIZE:]
 
     except KeyboardInterrupt:
         print("Stream stopped")
         logger.info("Stream stopped")
-
     finally:
         stream.stop_stream()
         stream.close()
@@ -190,7 +229,7 @@ def run_lipsync():
     logger.debug("USING CPU FOR NOW")  # Do something about this
     logger.info("Loading model...")
 
-    model = torch.load('lipsync_model_entire.pth', map_location=device)
+    model = torch.load('lipsync_model_test_three_1000ms_20bs.pth', map_location=device)
 
     model.to(device)
 
@@ -201,6 +240,6 @@ def run_lipsync():
         print(f"Predicted Viseme: {viseme}, Time Elapsed: {elapsed_time:.2f} ms")  # remove this
         logger.info(f"Predicted Viseme: {viseme}, Time Elapsed: {elapsed_time:.2f} ms")
 
-        yield int(str(viseme).strip('[]')) #temporarily here to test animation
+        yield viseme[0][0]
 
     logger.info("Process terminated")
