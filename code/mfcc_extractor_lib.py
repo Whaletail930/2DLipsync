@@ -96,8 +96,12 @@ def extract_features_live(audio_buffer, sampling_rate, n_mfcc=13, n_fft=400, hop
 
 
 def extract_features_from_file(file_path, sampling_rate=16000, n_mfcc=13, n_fft=400, hop_length=160, n_mels=40, fmax=None):
+    """
+    Extract features from a .wav file after applying the hard limiter.
+    """
 
     audio_buffer, file_sr = librosa.load(file_path, sr=sampling_rate)
+    audio_buffer = hard_limiter(audio_buffer, sampling_rate)
 
     audio_buffer = audio_buffer.astype(np.float32)
     audio_buffer /= np.max(np.abs(audio_buffer)) + np.finfo(float).eps
@@ -106,12 +110,9 @@ def extract_features_from_file(file_path, sampling_rate=16000, n_mfcc=13, n_fft=
 
     if mfcc.shape[1] > 1:
         delta_mfcc = librosa.feature.delta(mfcc, width=3)
-
         log_energy = librosa.feature.rms(y=audio_buffer, frame_length=n_fft, hop_length=hop_length, center=True)
         log_energy = np.log(log_energy + np.finfo(float).eps)
-
         delta_log_energy = librosa.feature.delta(log_energy, width=3)
-
         features = [mfcc, delta_mfcc, log_energy, delta_log_energy]
     else:
         features = [mfcc, None, None, None]
