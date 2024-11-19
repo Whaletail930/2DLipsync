@@ -20,7 +20,7 @@ class LipsyncModel(nn.Module):
         self.lstm = nn.LSTM(input_size, 200, batch_first=True)
         self.dropout = nn.Dropout(dropout_ratio)
         self.fc = nn.Linear(200, num_visemes)
-        self.decoder = DecodingLayer(label_mapping)  # Decoding layer
+        self.decoder = DecodingLayer(label_mapping)
 
     def forward(self, input_tensor, decode=True):
         """

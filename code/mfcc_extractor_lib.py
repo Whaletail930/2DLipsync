@@ -121,7 +121,7 @@ def extract_features_from_file(file_path, sampling_rate=16000, n_mfcc=13, n_fft=
 
 
 def save_features_to_file(file_path, output_path_json, sampling_rate=16000, n_mfcc=13, n_fft=400,
-                          hop_length=160, n_mels=40, fmax=None):
+                          hop_length=160, n_mels=128, fmax=None):
 
     features = extract_features_from_file(file_path, sampling_rate=sampling_rate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length,
                                           n_mels=n_mels, fmax=fmax)
@@ -255,17 +255,20 @@ def create_training_data(rec_file_path, data_type):
     return combined_data
 
 
-def process_wav_files(base_dir, folder_type):
+def process_wav_files(base_dir, folder_type, prefix_filter=None):
     """
-    Process only .wav files within the specified folder, converting .WAV files in place using sph2pipe.
+    Process only .wav files within the specified folder, optionally filtering by prefix, and converting .WAV files in place using sph2pipe.
+    Parameters:
+        base_dir (str): The base directory containing the folder to process.
+        folder_type (str): The subdirectory (e.g., "TRAIN" or "TEST").
+        prefix_filter (str or None): Optional prefix to filter the files. Only files starting with this prefix will be processed. Default is None.
     """
-
     target_dir = Path(base_dir) / folder_type
     processed_count = 0
 
     for root, subdirs, files in os.walk(target_dir):
         for file in files:
-            if file.endswith('.wav'):
+            if file.endswith('.wav') and (prefix_filter is None or file.startswith(prefix_filter)):
                 new_file = f"{str(file).strip('.wav')}_{processed_count}.wav"
                 new_file_path = Path(root) / new_file
                 file_path = Path(root) / file
@@ -279,15 +282,5 @@ def process_wav_files(base_dir, folder_type):
 
     print(f"All done. Files processed: {processed_count}")
 
-
-# #model = tf.keras.models.load_model(r'C:\Users\belle\PycharmProjects\2DLipsync\code\lipsync_model')
-# model = keras.models.load_model(r'C:\Users\belle\PycharmProjects\2DLipsync\code\lipsync_model_2')
-# print(model.input_shape)
-# print(model.summary())
-# #model.load_weights(r"C:\Users\belle\PycharmProjects\2DLipsync\code\lipsync_model.h5")
-# #model.compile(loss=tf.keras.losses.categorical_crossentropy, optimizer=tf.keras.optimizers.Adam(learning_rate=0.001))
-# process_live(model)
-
-
 # logger = setup_logger(script_name=os.path.splitext(os.path.basename(__file__))[0])
-# process_wav_files(r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\TIMIT", "train")
+# process_wav_files(r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\TIMIT", "test")

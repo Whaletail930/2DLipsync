@@ -45,7 +45,6 @@ def filter_predictions(predictions, window_size=3):
     if len(predictions) < window_size + 1:
         return predictions[-1] if predictions else None
 
-    # Lookahead-based filtering
     if predictions[-1] != predictions[-2]:
         if all(pred == predictions[-1] for pred in list(predictions)[-window_size:]):
             return predictions[-1]
@@ -259,7 +258,7 @@ def run_lipsync(audio_source='default', wav_file_path=None):
     logger.info(f"Device found: {device_name}")
     logger.info("Loading model...")
 
-    model = torch.load('lipsync_model_test_three_1000ms_20bs.pth', map_location=device)
+    model = torch.load('lipsync_model_test_three_1000ms_20bs_re2.pth', map_location=device)
     model.to(device)
     logger.info("Model successfully loaded")
     logger.info("Starting predictions")
