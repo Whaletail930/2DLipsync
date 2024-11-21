@@ -1,5 +1,6 @@
 import json
 import subprocess
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -70,7 +71,7 @@ def hard_limiter(audio_buffer, sampling_rate, threshold=0.8):
     return limited_buffer
 
 
-def extract_features_live(audio_buffer, sampling_rate, n_mfcc=13, n_fft=400, hop_length=160, n_mels=40, fmax=None):
+def extract_features_live(audio_buffer, sampling_rate, n_mfcc=13, n_fft=400, hop_length=160, n_mels=128, fmax=None):
     """
     Extracts features of 3 frames then returns the first one
 
@@ -95,7 +96,7 @@ def extract_features_live(audio_buffer, sampling_rate, n_mfcc=13, n_fft=400, hop
     return features.T[0]
 
 
-def extract_features_from_file(file_path, sampling_rate=16000, n_mfcc=13, n_fft=400, hop_length=160, n_mels=40, fmax=None):
+def extract_features_from_file(file_path, sampling_rate=16000, n_mfcc=13, n_fft=400, hop_length=160, n_mels=128, fmax=None):
     """
     Extract features from a .wav file after applying the hard limiter.
     """
@@ -222,31 +223,33 @@ def combine_data(mouthcue_file, features_file, data_type):
     return output_file
 
 
-def run_rhubarb_lipsync(recording_wav, data_type):
-
+def run_rhubarb_lipsync_with_txt(recording_wav, recording_txt, data_type):
+    """
+    Run Rhubarb to generate visemes using both the .wav and .txt files.
+    """
     recording_name = Path(recording_wav).name.strip('.wav')
     output_file = Path(OUTPUT_DIR / "rhubarb_output" / data_type / f"{recording_name}_visemes.json")
     rhubarb_path = r"C:\RESEARCH\2d_lipsync\Dataset generation\Rhubarb-Lip-Sync-1.13.0-Windows\rhubarb.exe"
 
     try:
-        subprocess.run([f"{rhubarb_path}", "-f", "json", "-o", f"{output_file}", f"{recording_wav}"])
+        subprocess.run([f"{rhubarb_path}", "-f", "json", "-o", f"{output_file}", "-d", f"{recording_txt}", f"{recording_wav}"])
 
         return output_file
 
     except Exception as e:
-
         print(e)
-
         return None
 
 
-def create_training_data(rec_file_path, data_type):
-
+def create_training_data_with_txt(rec_file_path, txt_file_path, data_type):
+    """
+    Create training data using both the .wav and .txt files.
+    """
     print(f"Extracting features from {Path(rec_file_path).name}")
     features_file = process_features_file(rec_file_path, data_type)
     print("Successfully extracted features")
-    print(f"Generating visemes from {Path(rec_file_path).name}")
-    mouthcues_file = run_rhubarb_lipsync(Path(rec_file_path), data_type)
+    print(f"Generating visemes from {Path(rec_file_path).name} with {Path(txt_file_path).name}")
+    mouthcues_file = run_rhubarb_lipsync_with_txt(rec_file_path, txt_file_path, data_type)
     print("Successfully generated visemes")
     print(f"Combining {mouthcues_file.name} and {features_file.name}")
     combined_data = combine_data(mouthcues_file, features_file, data_type)
@@ -257,7 +260,8 @@ def create_training_data(rec_file_path, data_type):
 
 def process_wav_files(base_dir, folder_type, prefix_filter=None):
     """
-    Process only .wav files within the specified folder, optionally filtering by prefix, and converting .WAV files in place using sph2pipe.
+    Process .wav and corresponding .txt files within the specified folder, optionally filtering by prefix,
+    renaming them, removing leading numbers from text files, and converting .WAV files using sph2pipe.
     Parameters:
         base_dir (str): The base directory containing the folder to process.
         folder_type (str): The subdirectory (e.g., "TRAIN" or "TEST").
@@ -269,18 +273,41 @@ def process_wav_files(base_dir, folder_type, prefix_filter=None):
     for root, subdirs, files in os.walk(target_dir):
         for file in files:
             if file.endswith('.wav') and (prefix_filter is None or file.startswith(prefix_filter)):
-                new_file = f"{str(file).strip('.wav')}_{processed_count}.wav"
-                new_file_path = Path(root) / new_file
-                file_path = Path(root) / file
-                os.rename(file_path, new_file_path)
-                logger.info(f"Processing {file_path}")
+                # Identify corresponding .txt file
+                wav_file_path = Path(root) / file
+                txt_file_path = wav_file_path.with_suffix('.txt')
 
-                create_training_data(new_file_path, folder_type)
+                # Ensure the .txt file exists
+                if not txt_file_path.exists():
+                    print(f"Warning: Missing .txt file for {wav_file_path}")
+                    continue
 
-                print(f"Processed and converted {new_file_path}")
+                # Rename files
+                new_base_name = f"{str(file).strip('.wav')}_{processed_count}"
+                new_wav_path = Path(root) / f"{new_base_name}.wav"
+                new_txt_path = Path(root) / f"{new_base_name}.txt"
+
+                os.rename(wav_file_path, new_wav_path)
+                os.rename(txt_file_path, new_txt_path)
+
+                # Remove leading numbers and spaces from the .txt file
+                with open(new_txt_path, 'r') as txt_file:
+                    text_content = txt_file.read()
+
+                # Use regex to remove all leading numbers and spaces
+                cleaned_text = re.sub(r'^\d+(?:\s+\d+)*\s*', '', text_content)
+
+                with open(new_txt_path, 'w') as txt_file:
+                    txt_file.write(cleaned_text)
+
+                # Process files
+                logger.info(f"Processing {new_wav_path}")
+                create_training_data_with_txt(new_wav_path, new_txt_path, folder_type)
+
+                print(f"Processed and converted {new_wav_path} with {new_txt_path}")
                 processed_count += 1
 
     print(f"All done. Files processed: {processed_count}")
 
 # logger = setup_logger(script_name=os.path.splitext(os.path.basename(__file__))[0])
-# process_wav_files(r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\TIMIT", "test")
+# process_wav_files(r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\TIMIT", "train")

@@ -17,6 +17,8 @@ WINDOW_DURATION = 0.025
 STRIDE_DURATION = 0.01
 CHUNK_SIZE = int(RATE * WINDOW_DURATION)
 STRIDE_SIZE = int(RATE * STRIDE_DURATION)
+ORIGINAL_RATE = 100
+TARGET_RATE = 24
 p = pyaudio.PyAudio()
 logger = setup_logger(script_name=os.path.splitext(os.path.basename(__file__))[0])
 
@@ -54,19 +56,6 @@ def filter_predictions(predictions, window_size=3):
         return predictions[-1]
 
 
-def remove_single_frame_visemes(current_viseme, previous_viseme, viseme_duration):
-    """
-    Enforce a minimum duration of two frames for each viseme.
-    """
-    if current_viseme != previous_viseme:
-        if viseme_duration < 2:
-            return previous_viseme, viseme_duration + 1
-        else:
-            return current_viseme, 1
-    else:
-        return current_viseme, viseme_duration + 1
-
-
 def initialize_stream(audio_source='default', wav_file_path=None):
     """Initialize the audio input stream based on the selected audio source."""
     if audio_source == 'wav_file' and wav_file_path:
@@ -95,6 +84,7 @@ def make_prediction(model, device, features):
     input_tensor = torch.tensor(features, dtype=torch.float32).to(device)
     with torch.no_grad():
         predictions = model(input_tensor.view(1, 1, -1))
+
     return predictions
 
 
@@ -119,37 +109,94 @@ def apply_noise_reduction(buffer, noise_profile):
     return np.nan_to_num(reduced_noise_buffer)
 
 
-def downsample_predictions(predictions, original_rate=100, target_rate=24):
+def group_visemes_into_frames(predictions, visemes_per_frame=4):
     """
-    Downsample viseme predictions from original_rate to target_rate using majority voting.
+    Group viseme predictions into frames where each frame consists of a fixed number of visemes.
+    Majority voting is used to determine the dominant viseme within each group,
+    but all original visemes remain part of the frame.
 
     Parameters:
-        predictions (list): List of viseme predictions at the original rate.
-        original_rate (int): The original prediction rate (default is 100 Hz).
-        target_rate (int): The desired output rate (default is 24 Hz).
+        predictions (list): List of viseme predictions.
+        visemes_per_frame (int): Number of visemes per frame (default: 4 for 24Hz from 100Hz).
 
     Returns:
-        list: Downsampled viseme predictions at the target rate.
+        list: List of grouped viseme predictions, where each frame retains `visemes_per_frame` visemes.
     """
-    ratio = original_rate / target_rate
-    downsampled_predictions = []
+    frames = []
+    for i in range(0, len(predictions), visemes_per_frame):
+        # Group the next `visemes_per_frame` visemes
+        group = predictions[i:i + visemes_per_frame]
 
-    for i in range(0, len(predictions), int(ratio)):
-        batch = predictions[i:i + int(ratio)]
-        flattened_batch = [item[0][0] if isinstance(item, list) and isinstance(item[0], list) else item
-                           for item in batch]
+        flattened_group = [item for sublist in group for innerlist in sublist for item in innerlist]
+        # Apply majority voting to determine the dominant viseme in the group
+        counts = Counter(flattened_group)
+        most_common_viseme, _ = counts.most_common(1)[0]
 
-        if not flattened_batch:
-            continue
+        # Replace all visemes in the group with the most common one
+        frame = [most_common_viseme] * visemes_per_frame
+        frames.append(frame)
 
-        count = Counter(flattened_batch)
-        most_common_viseme, _ = count.most_common(1)[0]
-        downsampled_predictions.append(most_common_viseme)
-
-    return downsampled_predictions
+    return frames
 
 
-def process_live(model, device, audio_source='default', wav_file_path=None, db_threshold=-35, min_silence_frames=3,
+def remove_single_frame_visemes(frames):
+    """
+    Remove single-frame visemes by enforcing a minimum duration of two frames per viseme.
+    Each frame consists of multiple visemes, and the structure is preserved.
+
+    Parameters:
+        frames (list): List of frames, where each frame is a list of viseme predictions.
+
+    Returns:
+        list: List of frames with single-frame viseme transitions replaced.
+    """
+    final_frames = []
+    previous_frame = None
+    viseme_duration = 0
+
+    for current_frame in frames:
+        # Ensure the frame structure is consistent (all elements in a frame are the same)
+        dominant_viseme = current_frame[0] if current_frame else 'X'
+
+        if previous_frame is None or dominant_viseme != previous_frame[0]:
+            if viseme_duration < 2 and previous_frame is not None:
+                # If the previous viseme was too short, replace it with the current viseme
+                final_frames.extend([previous_frame] * viseme_duration)
+            viseme_duration = 2
+            previous_frame = current_frame
+        else:
+            # Increment the duration for the current viseme
+            viseme_duration += 1
+
+        # Add the current frame to the final list if it has stabilized
+        if viseme_duration >= 2:
+            final_frames.append(current_frame)
+
+    return final_frames
+
+
+def downsample_and_clean_predictions(predictions, original_rate=100, target_rate=24):
+    """
+    Downsample predictions to match the target frame rate and clean them by replacing single-frame visemes.
+
+    Parameters:
+        predictions (list): List of raw viseme predictions at the original rate.
+        original_rate (int): The original prediction rate (default: 100Hz).
+        target_rate (int): The desired output rate (default: 24Hz).
+
+    Returns:
+        list: Cleaned predictions downsampled to the target frame rate.
+    """
+    # Group predictions into frames
+    grouped_predictions = group_visemes_into_frames(predictions, visemes_per_frame=original_rate // target_rate)
+
+    # Replace single-frame visemes from the grouped predictions
+    cleaned_predictions = remove_single_frame_visemes(grouped_predictions)
+
+    return cleaned_predictions
+
+
+def process_live(model, device, db_threshold=-35, audio_source='default', wav_file_path=None, min_silence_frames=5,
                  min_sound_frames=5):
     """Process audio data in real-time from the specified source, generating viseme predictions."""
 
@@ -175,6 +222,7 @@ def process_live(model, device, audio_source='default', wav_file_path=None, db_t
         while True:
             audio_capture_time = time.time()
 
+            # Read audio chunk
             audio_chunk = read_audio_chunk_to_array(stream, audio_source)
             if audio_chunk is None:
                 break
@@ -187,24 +235,20 @@ def process_live(model, device, audio_source='default', wav_file_path=None, db_t
                 else:
                     buffer_noisy_reduced = buffer[:CHUNK_SIZE]
 
+                # Process audio
                 db_level = librosa.amplitude_to_db(np.abs(librosa.stft(buffer_noisy_reduced, n_fft=256)),
                                                    ref=np.max).mean()
-                print(f"dB Level: {db_level:.2f} dB")
 
                 if db_level < db_threshold:
-                    sound_counter = 0
                     silence_counter += 1
-
                     if silence_counter >= min_silence_frames:
                         silence_mode = True
                         silence_counter = min_silence_frames
 
                     latency = (time.time() - audio_capture_time) * 1000
-                    print("Input below threshold, outputting 'X'.")
                     yield 'X', latency
                     buffer = buffer[CHUNK_SIZE:]
                     continue
-
                 else:
                     silence_counter = 0
                     sound_counter += 1
@@ -221,19 +265,24 @@ def process_live(model, device, audio_source='default', wav_file_path=None, db_t
                     predictions_buffer.append(predicted_viseme)
                     final_viseme = filter_predictions(predictions_buffer)
                     final_viseme = final_viseme if final_viseme is not None else previous_viseme
-                    final_viseme, viseme_duration = remove_single_frame_visemes(final_viseme, previous_viseme,
-                                                                                viseme_duration)
                     previous_viseme = final_viseme
 
                     downsample_buffer.append(final_viseme)
 
-                    if len(downsample_buffer) >= 4:
-                        downsampled_output = downsample_predictions(downsample_buffer)
+                    # Process buffer for grouped predictions
+                    if len(downsample_buffer) >= ORIGINAL_RATE // TARGET_RATE:
+                        grouped_predictions = group_visemes_into_frames(
+                            downsample_buffer,
+                            visemes_per_frame=ORIGINAL_RATE // TARGET_RATE
+                        )
                         downsample_buffer.clear()
 
-                        for viseme in downsampled_output:
-                            latency = (time.time() - audio_capture_time) * 1000
-                            yield viseme, latency
+                        cleaned_predictions = remove_single_frame_visemes(grouped_predictions)
+
+                        for frame in cleaned_predictions:
+                            for viseme in frame:
+                                latency = (time.time() - audio_capture_time) * 1000
+                                yield viseme, latency
 
                     buffer = buffer[CHUNK_SIZE:]
 
@@ -241,15 +290,12 @@ def process_live(model, device, audio_source='default', wav_file_path=None, db_t
         print("Stream stopped")
         logger.info("Stream stopped")
     finally:
-        if audio_source == 'wav_file':
-            stream.close()
-        else:
-            stream.stop_stream()
-            stream.close()
+        stream.stop_stream()
+        stream.close()
         p.terminate()
 
 
-def run_lipsync(audio_source='default', wav_file_path=None):
+def run_lipsync(db_threshold, audio_source='default', wav_file_path=None):
     """Run the lipsync model with the selected audio source."""
     logger.info("Attempting to find GPU...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -263,7 +309,7 @@ def run_lipsync(audio_source='default', wav_file_path=None):
     logger.info("Model successfully loaded")
     logger.info("Starting predictions")
 
-    for viseme, latency in process_live(model, device, audio_source=audio_source, wav_file_path=wav_file_path):
+    for viseme, latency in process_live(model, device, db_threshold, audio_source=audio_source, wav_file_path=wav_file_path):
         print(f"Predicted Viseme: {viseme}, Latency: {latency:.2f} ms")
         logger.info(f"Predicted Viseme: {viseme}, Latency: {latency:.2f} ms")
 

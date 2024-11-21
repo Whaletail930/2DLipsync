@@ -129,12 +129,10 @@ def plot_percentage_ranges(percentage_ranges):
     plt.show()
 
 
-folder_path = r"C:\Users\belle\PycharmProjects\2DLipsync\OUTPUT\TRAIN"  # Replace with your actual folder path
+folder_path = r"/OUTPUT/TRAIN"
 
-# Count visemes and display their distribution
 # viseme_counts = count_visemes_in_folder(folder_path)
 # plot_viseme_counts(viseme_counts)
 
-# Analyze viseme percentage for 'B' and display the file distribution
 percentage_ranges = analyze_viseme_percentage(folder_path, target_viseme='B')
 plot_percentage_ranges(percentage_ranges)

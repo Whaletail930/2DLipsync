@@ -7,7 +7,7 @@ FORMAT = pyaudio.paInt16  # 16-bit resolution
 CHANNELS = 1              # Mono audio
 RATE = 44100              # 44.1kHz sampling rate
 CHUNK = 1024              # 2^10 samples per frame
-OUTPUT_FILENAME = "output.wav"
+OUTPUT_FILENAME = "../output.wav"
 
 
 def record_audio(duration=10, output_filename=OUTPUT_FILENAME):
@@ -83,4 +83,4 @@ def get_wavefile_db_levels(file_path):
     return db_levels
 
 
-get_wavefile_db_levels("output.wav")
+get_wavefile_db_levels("../output.wav")

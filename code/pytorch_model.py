@@ -318,7 +318,7 @@ def run_training_process(data_dir, output_folder, model_name, sequence_length=1.
 
     best_val_loss = float('inf')
     patience_counter = 0
-    best_model_path = os.path.join(output_folder, f'{model_name}_best.pth')
+    best_model_path = os.path.join(f'{model_name}_best.pth')
 
     for epoch in range(num_epochs):
         model.train()
@@ -511,4 +511,4 @@ def plot_training_metrics(training_losses, training_accuracies, validation_losse
 data_dir = r"C:\Users\belle\PycharmProjects\2DLipsync\OUTPUT"
 output_folder = r'C:\Users\belle\PycharmProjects\2DLipsync\OUTPUT'
 
-run_training_process(data_dir, output_folder, 'lipsync_model_test_three_1000ms_20bs_128mel_earlystop')
+run_training_process(data_dir, output_folder, 'lipsync_model_test_three_1000ms_20bs_128mel_earlystop_txt')
