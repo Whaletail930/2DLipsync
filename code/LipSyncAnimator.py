@@ -11,35 +11,32 @@ logger = setup_logger(script_name=os.path.splitext(os.path.basename(__file__))[0
 
 
 class LipSyncAnimator:
-    def __init__(self, root, image_mapping):
+    def __init__(self, root, image_mapping, model_path):
         self.root = root
         self.root.title("Live Lipsync")
-        self.root.geometry("500x600")  # Adjusted height to accommodate slider
+        self.root.geometry("500x600")
 
-        # Image display
         self.image_label = tk.Label(root)
         self.image_label.pack(expand=True)
 
-        # Slider for dB threshold
         self.slider_label = tk.Label(root, text="Set dB Threshold")
         self.slider_label.pack(pady=5)
         self.db_slider = tk.Scale(
             root, from_=-80, to=0, resolution=1, orient="horizontal", command=self.update_threshold
         )
-        self.db_slider.set(-35)  # Default value
+        self.db_slider.set(-35)
         self.db_slider.pack(pady=10)
 
-        # Start/Stop button
         self.start_stop_button = tk.Button(root, text="Start", command=self.toggle_sequence)
         self.start_stop_button.pack(pady=10)
 
-        # Image mapping and generator control
+        self.model_path = model_path
         self.image_mapping = image_mapping
         self.current_viseme = None
         self.is_running = False
         self.generator_thread = None
         self.queue = queue.Queue()
-        self.db_threshold = -35  # Default threshold value
+        self.db_threshold = -35
 
     def update_threshold(self, value):
         """Update the dB threshold based on the slider."""
@@ -60,7 +57,7 @@ class LipSyncAnimator:
             self.update_image()
 
     def run_generator(self):
-        for viseme in run_lipsync(db_threshold=self.db_threshold):  # Pass updated db_threshold to run_lipsync
+        for viseme in run_lipsync(model_path=self.model_path, db_threshold=self.db_threshold):
             if not self.is_running:
                 break
             self.queue.put(viseme)

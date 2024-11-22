@@ -19,5 +19,6 @@ image_mapping = {
 
 
 root = tk.Tk()
-app = LipSyncAnimator(root, image_mapping)
+model_path = "path"
+app = LipSyncAnimator(root, image_mapping, model_path)
 root.mainloop()

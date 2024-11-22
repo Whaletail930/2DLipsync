@@ -308,6 +308,3 @@ def process_wav_files(base_dir, folder_type, prefix_filter=None):
                 processed_count += 1
 
     print(f"All done. Files processed: {processed_count}")
-
-# logger = setup_logger(script_name=os.path.splitext(os.path.basename(__file__))[0])
-# process_wav_files(r"C:\Users\belle\PycharmProjects\2DLipsync\DATA\TIMIT", "train")

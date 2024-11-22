@@ -295,7 +295,7 @@ def process_live(model, device, db_threshold=-35, audio_source='default', wav_fi
         p.terminate()
 
 
-def run_lipsync(db_threshold, audio_source='default', wav_file_path=None):
+def run_lipsync(model_path, db_threshold, audio_source='default', wav_file_path=None):
     """Run the lipsync model with the selected audio source."""
     logger.info("Attempting to find GPU...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -304,7 +304,7 @@ def run_lipsync(db_threshold, audio_source='default', wav_file_path=None):
     logger.info(f"Device found: {device_name}")
     logger.info("Loading model...")
 
-    model = torch.load('lipsync_model_test_three_1000ms_20bs_re2.pth', map_location=device)
+    model = torch.load(model_path, map_location=device)
     model.to(device)
     logger.info("Model successfully loaded")
     logger.info("Starting predictions")
