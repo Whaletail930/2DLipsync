@@ -11,7 +11,6 @@ VISEME_FOLDER = Path(__file__).resolve().parent / "static/viseme_images"
 
 logger = setup_logger(script_name=os.path.splitext(os.path.basename(__file__))[0])
 
-
 image_mapping = {
     0: f"{VISEME_FOLDER}/A.png",
     1: f"{VISEME_FOLDER}/B.png",
@@ -35,7 +34,6 @@ def index():
 
 
 def send_prediction():
-
     timeout_counter = 0
 
     for viseme in run_lipsync():
@@ -58,12 +56,10 @@ def send_prediction():
 
 @socketio.on('connect')
 def handle_connect():
-
     logger.info("Connecting and starting emission")
     socketio.start_background_task(send_prediction)
 
 
 if __name__ == '__main__':
-
     logger.info("Starting app...")
     socketio.run(app)

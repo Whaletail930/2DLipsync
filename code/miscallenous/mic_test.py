@@ -3,10 +3,10 @@ import wave
 import numpy as np
 import librosa
 
-FORMAT = pyaudio.paInt16  # 16-bit resolution
-CHANNELS = 1              # Mono audio
-RATE = 44100              # 44.1kHz sampling rate
-CHUNK = 1024              # 2^10 samples per frame
+FORMAT = pyaudio.paInt16
+CHANNELS = 1
+RATE = 44100
+CHUNK = 1024
 OUTPUT_FILENAME = "../output.wav"
 
 
@@ -28,7 +28,6 @@ def record_audio(duration=10, output_filename=OUTPUT_FILENAME):
     stream.close()
     audio.terminate()
 
-    # Save audio to file
     with wave.open(output_filename, 'wb') as wf:
         wf.setnchannels(CHANNELS)
         wf.setsampwidth(audio.get_sample_size(FORMAT))
@@ -46,19 +45,17 @@ def monitor_db_level():
     print("Monitoring dB levels... Press Ctrl+C to stop.")
 
     try:
-        buffer = np.zeros((0,), dtype=np.float32)  # Initialize an empty buffer with float32 type
+        buffer = np.zeros((0,), dtype=np.float32)
         while True:
             data = stream.read(CHUNK)
-            audio_data = np.frombuffer(data, dtype=np.int16).astype(np.float32)  # Convert to float32
-            buffer = np.concatenate([buffer, audio_data])  # Add new audio data to the buffer
+            audio_data = np.frombuffer(data, dtype=np.int16).astype(np.float32)
+            buffer = np.concatenate([buffer, audio_data])
 
-            # Only calculate dB level if buffer has enough data
             if len(buffer) >= CHUNK:
                 stft = librosa.stft(buffer[:CHUNK])
                 db_level = librosa.amplitude_to_db(np.abs(stft), ref=np.max).mean()
                 print(f"dB Level: {db_level:.2f} dB")
 
-                # Remove processed chunk from the buffer
                 buffer = buffer[CHUNK:]
 
     except KeyboardInterrupt:
@@ -78,9 +75,6 @@ def get_wavefile_db_levels(file_path):
 
     for i, frame_db in enumerate(db_levels.T):
         avg_db = frame_db.mean()
-        print(f"Frame {i+1}: {avg_db:.2f} dB")
+        print(f"Frame {i + 1}: {avg_db:.2f} dB")
 
     return db_levels
-
-
-get_wavefile_db_levels("../output.wav")

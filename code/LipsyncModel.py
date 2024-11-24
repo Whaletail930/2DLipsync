@@ -35,4 +35,3 @@ class LipsyncModel(nn.Module):
         if decode:
             out = self.decoder(out.argmax(dim=2))
         return out
-

@@ -92,7 +92,8 @@ def estimate_noise_profile(audio_source, duration_sec=1):
     """Capture a short segment of audio to estimate the noise profile."""
     print("Estimating noise profile, please hold still...")
     stream = initialize_stream()
-    noise_samples = [read_audio_chunk_to_array(stream, audio_source) for _ in range(int(RATE / STRIDE_SIZE * duration_sec))]
+    noise_samples = [read_audio_chunk_to_array(stream, audio_source) for _ in
+                     range(int(RATE / STRIDE_SIZE * duration_sec))]
     stream.stop_stream()
     stream.close()
     noise_profile = np.concatenate(noise_samples)
@@ -309,7 +310,8 @@ def run_lipsync(model_path, db_threshold, audio_source='default', wav_file_path=
     logger.info("Model successfully loaded")
     logger.info("Starting predictions")
 
-    for viseme, latency in process_live(model, device, db_threshold, audio_source=audio_source, wav_file_path=wav_file_path):
+    for viseme, latency in process_live(model, device, db_threshold, audio_source=audio_source,
+                                        wav_file_path=wav_file_path):
         print(f"Predicted Viseme: {viseme}, Latency: {latency:.2f} ms")
         logger.info(f"Predicted Viseme: {viseme}, Latency: {latency:.2f} ms")
 

@@ -86,7 +86,6 @@ def analyze_viseme_percentage(folder_path, target_viseme='B'):
     return percentage_ranges
 
 
-
 def plot_viseme_counts(viseme_counts):
     """
     Plots the distribution of visemes in a bar chart.
@@ -134,5 +133,5 @@ folder_path = r"/OUTPUT/TRAIN"
 # viseme_counts = count_visemes_in_folder(folder_path)
 # plot_viseme_counts(viseme_counts)
 
-percentage_ranges = analyze_viseme_percentage(folder_path, target_viseme='B')
-plot_percentage_ranges(percentage_ranges)
+# percentage_ranges = analyze_viseme_percentage(folder_path, target_viseme='B')
+# plot_percentage_ranges(percentage_ranges)

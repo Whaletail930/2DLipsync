@@ -67,7 +67,6 @@ def calculate_stats(data_dir):
 def json_to_dataframe(json_data, stats):
     data_list = []
     for entry in json_data:
-
         mfcc = normalize(entry["mfcc"], stats, "mfcc")
         delta_mfcc = normalize(entry["delta_mfcc"], stats, "delta_mfcc")
         log_energy = normalize(entry["log_energy"], stats, "log_energy")
@@ -107,7 +106,6 @@ def prefit_label_encoder(folder_path, stats):
 
 
 def data_generator(folder_path, label_encoder, frames_per_sequence, batch_size=1, steps_per_epoch=None, stats=None):
-
     file_names = [f for f in os.listdir(folder_path) if f.endswith('.json')]
     steps = 0
     batch_features = []
@@ -282,7 +280,8 @@ def validation_step(model, validation_files, label_encoder, frames_per_sequence,
     return val_loss, val_accuracy
 
 
-def run_training_process(data_dir, output_folder, model_name, sequence_length=1.0, batch_size=20, num_epochs=200, learning_rate=0.001, patience=10):
+def run_training_process(data_dir, output_folder, model_name, sequence_length=1.0, batch_size=20, num_epochs=200,
+                         learning_rate=0.001, patience=10):
     """
     Run the training process with early stopping based on validation loss.
     """
@@ -294,10 +293,12 @@ def run_training_process(data_dir, output_folder, model_name, sequence_length=1.
     label_encoder = prefit_label_encoder(train_folder, stats)
     int_to_label = {i: label for i, label in enumerate(label_encoder.classes_)}
 
-    first_batch, _ = next(data_generator(train_folder, label_encoder, frames_per_sequence=40, batch_size=20, stats=stats))
+    first_batch, _ = next(
+        data_generator(train_folder, label_encoder, frames_per_sequence=40, batch_size=20, stats=stats))
     input_size = first_batch.shape[2]
     num_visemes = len(label_encoder.classes_)
-    model = LipsyncModel(input_size=input_size, num_visemes=num_visemes, label_mapping=int_to_label, dropout_ratio=0.5).to(device)
+    model = LipsyncModel(input_size=input_size, num_visemes=num_visemes, label_mapping=int_to_label,
+                         dropout_ratio=0.5).to(device)
 
     test_files = [os.path.join(test_folder, f) for f in os.listdir(test_folder) if f.endswith('.json')]
     validation_files, test_files = train_test_split(test_files, test_size=0.5, random_state=42)
@@ -333,7 +334,8 @@ def run_training_process(data_dir, output_folder, model_name, sequence_length=1.
 
             outputs = model(features, decode=False)
 
-            outputs = outputs.view(-1, outputs.size(-1)) if isinstance(outputs, torch.Tensor) else torch.tensor(outputs, device=device)
+            outputs = outputs.view(-1, outputs.size(-1)) if isinstance(outputs, torch.Tensor) else torch.tensor(outputs,
+                                                                                                                device=device)
             labels = labels.view(-1)
 
             loss = criterion(outputs, labels)
@@ -352,7 +354,8 @@ def run_training_process(data_dir, output_folder, model_name, sequence_length=1.
 
         train_loss = epoch_loss / steps_per_epoch
         train_accuracy = correct / total * 100
-        val_loss, val_accuracy = validation_step(model, validation_files, label_encoder, frames_per_sequence, batch_size, stats)
+        val_loss, val_accuracy = validation_step(model, validation_files, label_encoder, frames_per_sequence,
+                                                 batch_size, stats)
 
         training_losses.append(train_loss)
         validation_losses.append(val_loss)
@@ -362,7 +365,8 @@ def run_training_process(data_dir, output_folder, model_name, sequence_length=1.
         print(f'Epoch [{epoch + 1}/{num_epochs}] Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}')
         print(f'Training Accuracy: {train_accuracy:.2f}%, Validation Accuracy: {val_accuracy:.2f}%')
 
-        logger.info(f'Epoch [{epoch + 1}/{num_epochs}] Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}')
+        logger.info(
+            f'Epoch [{epoch + 1}/{num_epochs}] Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}')
         logger.info(f'Training Accuracy: {train_accuracy:.2f}%, Validation Accuracy: {val_accuracy:.2f}%')
 
         if val_loss < best_val_loss:
@@ -384,7 +388,8 @@ def run_training_process(data_dir, output_folder, model_name, sequence_length=1.
     test_accuracy, confusion_mtx = test_model(model, test_files, label_encoder, frames_per_sequence, batch_size, stats)
     print(f"Final Test Accuracy: {test_accuracy:.2f}%")
 
-    plot_training_metrics(training_losses, training_accuracies, validation_losses, validation_accuracies, confusion_mtx, learning_rates, label_encoder)
+    plot_training_metrics(training_losses, training_accuracies, validation_losses, validation_accuracies, confusion_mtx,
+                          learning_rates, label_encoder)
 
 
 def test_model(model, test_files, label_encoder, frames_per_sequence, batch_size, stats):
@@ -457,7 +462,8 @@ def test_model(model, test_files, label_encoder, frames_per_sequence, batch_size
     return test_accuracy, confusion_mtx
 
 
-def plot_training_metrics(training_losses, training_accuracies, validation_losses, validation_accuracies, confusion_mtx, learning_rates, label_encoder, output_folder='plots'):
+def plot_training_metrics(training_losses, training_accuracies, validation_losses, validation_accuracies, confusion_mtx,
+                          learning_rates, label_encoder, output_folder='plots'):
     os.makedirs(output_folder, exist_ok=True)
     epochs = range(1, len(training_losses) + 1)
 
@@ -505,7 +511,6 @@ def plot_training_metrics(training_losses, training_accuracies, validation_losse
     plt.title('Confusion Matrix')
     plt.savefig(os.path.join(output_folder, 'confusion_matrix.png'))
     plt.close()
-
 
 
 data_dir = r"C:\Users\belle\PycharmProjects\2DLipsync\OUTPUT"

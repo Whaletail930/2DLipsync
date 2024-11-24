@@ -12,7 +12,6 @@ from pydub import AudioSegment
 from pydub.effects import normalize
 import os
 
-
 FORMAT = pyaudio.paFloat32
 CHANNELS = 1
 RATE = 16000
@@ -28,7 +27,6 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "DATA"
 
 
 def setup_logger(script_name):
-
     current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     log_filename = DATA_DIR / "logs" / f"lipsync_{current_time}.log"
 
@@ -96,7 +94,8 @@ def extract_features_live(audio_buffer, sampling_rate, n_mfcc=13, n_fft=400, hop
     return features.T[0]
 
 
-def extract_features_from_file(file_path, sampling_rate=16000, n_mfcc=13, n_fft=400, hop_length=160, n_mels=128, fmax=None):
+def extract_features_from_file(file_path, sampling_rate=16000, n_mfcc=13, n_fft=400, hop_length=160, n_mels=128,
+                               fmax=None):
     """
     Extract features from a .wav file after applying the hard limiter.
     """
@@ -107,7 +106,8 @@ def extract_features_from_file(file_path, sampling_rate=16000, n_mfcc=13, n_fft=
     audio_buffer = audio_buffer.astype(np.float32)
     audio_buffer /= np.max(np.abs(audio_buffer)) + np.finfo(float).eps
 
-    mfcc = librosa.feature.mfcc(y=audio_buffer, sr=sampling_rate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels, fmax=fmax)
+    mfcc = librosa.feature.mfcc(y=audio_buffer, sr=sampling_rate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length,
+                                n_mels=n_mels, fmax=fmax)
 
     if mfcc.shape[1] > 1:
         delta_mfcc = librosa.feature.delta(mfcc, width=3)
@@ -123,8 +123,8 @@ def extract_features_from_file(file_path, sampling_rate=16000, n_mfcc=13, n_fft=
 
 def save_features_to_file(file_path, output_path_json, sampling_rate=16000, n_mfcc=13, n_fft=400,
                           hop_length=160, n_mels=128, fmax=None):
-
-    features = extract_features_from_file(file_path, sampling_rate=sampling_rate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length,
+    features = extract_features_from_file(file_path, sampling_rate=sampling_rate, n_mfcc=n_mfcc, n_fft=n_fft,
+                                          hop_length=hop_length,
                                           n_mels=n_mels, fmax=fmax)
 
     os.makedirs(os.path.dirname(output_path_json), exist_ok=True)
@@ -202,7 +202,6 @@ def pair_mouthcues_with_features(features_file, mouthcues_file, output_file):
 
 
 def process_features_file(rec_file_path, data_type):
-
     recording_name = Path(rec_file_path).name.strip('.wav')
     output_path_json = Path(OUTPUT_DIR / "features" / data_type / f"{recording_name}_features.json")
 
@@ -212,7 +211,6 @@ def process_features_file(rec_file_path, data_type):
 
 
 def combine_data(mouthcue_file, features_file, data_type):
-
     file_name = Path(features_file).name.strip('_features.wav')
 
     output_file = Path(OUTPUT_DIR / data_type / f"{file_name.strip('.json')}_combined.json")
@@ -232,7 +230,8 @@ def run_rhubarb_lipsync_with_txt(recording_wav, recording_txt, data_type):
     rhubarb_path = r"C:\RESEARCH\2d_lipsync\Dataset generation\Rhubarb-Lip-Sync-1.13.0-Windows\rhubarb.exe"
 
     try:
-        subprocess.run([f"{rhubarb_path}", "-f", "json", "-o", f"{output_file}", "-d", f"{recording_txt}", f"{recording_wav}"])
+        subprocess.run(
+            [f"{rhubarb_path}", "-f", "json", "-o", f"{output_file}", "-d", f"{recording_txt}", f"{recording_wav}"])
 
         return output_file
 
@@ -273,16 +272,14 @@ def process_wav_files(base_dir, folder_type, prefix_filter=None):
     for root, subdirs, files in os.walk(target_dir):
         for file in files:
             if file.endswith('.wav') and (prefix_filter is None or file.startswith(prefix_filter)):
-                # Identify corresponding .txt file
+
                 wav_file_path = Path(root) / file
                 txt_file_path = wav_file_path.with_suffix('.txt')
 
-                # Ensure the .txt file exists
                 if not txt_file_path.exists():
                     print(f"Warning: Missing .txt file for {wav_file_path}")
                     continue
 
-                # Rename files
                 new_base_name = f"{str(file).strip('.wav')}_{processed_count}"
                 new_wav_path = Path(root) / f"{new_base_name}.wav"
                 new_txt_path = Path(root) / f"{new_base_name}.txt"
@@ -290,17 +287,14 @@ def process_wav_files(base_dir, folder_type, prefix_filter=None):
                 os.rename(wav_file_path, new_wav_path)
                 os.rename(txt_file_path, new_txt_path)
 
-                # Remove leading numbers and spaces from the .txt file
                 with open(new_txt_path, 'r') as txt_file:
                     text_content = txt_file.read()
 
-                # Use regex to remove all leading numbers and spaces
                 cleaned_text = re.sub(r'^\d+(?:\s+\d+)*\s*', '', text_content)
 
                 with open(new_txt_path, 'w') as txt_file:
                     txt_file.write(cleaned_text)
 
-                # Process files
                 logger.info(f"Processing {new_wav_path}")
                 create_training_data_with_txt(new_wav_path, new_txt_path, folder_type)
 

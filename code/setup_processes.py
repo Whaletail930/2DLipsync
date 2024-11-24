@@ -14,5 +14,3 @@ data_dir = "Path"
 output_folder = "Path"
 
 run_training_process(data_dir, output_folder, 'model_path')
-
-

@@ -17,7 +17,6 @@ image_mapping = {
     "X": f"{VISEME_FOLDER}/X.png",
 }
 
-
 root = tk.Tk()
 model_path = "path"
 app = LipSyncAnimator(root, image_mapping, model_path)
